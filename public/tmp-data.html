@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ข้อมูลที่ Import แล้ว - P4P System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background: #f8faff; }
+        @media print {
+            header, footer, #filterCard, #userBar { display: none !important; }
+            body { background: white; }
+        }
+        .main-header { background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 60%, #7dd3fc 100%); }
+        .card { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(14,165,233,0.10); border: 1px solid rgba(14,165,233,0.12); }
+
+        select { border: 1.5px solid #bae6fd; border-radius: 12px; background: #f0f9ff; transition: all 0.15s; }
+        select:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.18); background: #fff; }
+
+        .search-btn {
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            border-radius: 12px; color: #fff; font-weight: 700;
+            box-shadow: 0 4px 14px rgba(14,165,233,0.40);
+            transition: all 0.2s;
+        }
+        .search-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(14,165,233,0.50); }
+
+        .print-btn {
+            background: #f0f9ff; border: 1.5px solid #bae6fd;
+            border-radius: 12px; color: #0369a1; font-weight: 600;
+            transition: all 0.2s;
+        }
+        .print-btn:hover { background: #e0f2fe; }
+
+        /* Table */
+        .data-table { border-collapse: collapse; width: 100%; }
+        .data-table thead th {
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            color: #fff; font-size: 0.72rem; padding: 11px 14px;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .data-table thead th:first-child { border-radius: 12px 0 0 0; }
+        .data-table thead th:last-child  { border-radius: 0 12px 0 0; }
+        .data-table tbody tr:nth-child(even) { background: #f0f9ff; }
+        .data-table tbody tr:hover { background: #e0f2fe; }
+        .data-table tbody td { padding: 10px 14px; font-size: 0.85rem; color: #334155; border-bottom: 1px solid #e0f2fe; }
+        .data-table tfoot td {
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            color: #fff; padding: 12px 14px; font-weight: 700;
+        }
+        .data-table tfoot td:first-child { border-radius: 0 0 0 12px; }
+        .data-table tfoot td:last-child  { border-radius: 0 0 12px 0; }
+
+        .log-btn {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border-radius: 8px; color: #fff; font-size: 0.75rem; font-weight: 600;
+            padding: 4px 10px; transition: all 0.18s;
+            box-shadow: 0 2px 8px rgba(245,158,11,0.30);
+        }
+        .log-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.45); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="main-header text-white shadow-xl">
+        <div class="container mx-auto px-6 py-5 flex items-center justify-between max-w-6xl">
+            <div class="flex items-center gap-4">
+                <a href="p4p-import.html"
+                   class="bg-white bg-opacity-20 hover:bg-opacity-30 border border-white border-opacity-25 text-white px-3 py-2 rounded-xl transition text-sm flex items-center gap-2">
+                    <i class="fas fa-arrow-left text-xs"></i><span>กลับ</span>
+                </a>
+                <div>
+                    <h1 class="text-xl font-bold flex items-center gap-2">
+                        <i class="fas fa-table opacity-90"></i>ข้อมูลที่ Import แล้ว
+                    </h1>
+                    <p class="text-sky-100 text-xs mt-0.5 opacity-80">ข้อมูลจากตาราง tmp_p4p_point</p>
+                </div>
+            </div>
+            <div id="userBar" class="hidden"></div>
+        </div>
+        <div class="h-1" style="background: linear-gradient(90deg, #38ef7d, #11998e, #0ea5e9, #667eea);"></div>
+    </header>
+
+    <main class="flex-1 container mx-auto px-6 py-7 max-w-6xl">
+
+        <div id="alert" class="hidden mb-5"></div>
+
+        <!-- Filter Card -->
+        <div id="filterCard" class="card mb-5 overflow-hidden">
+            <div class="px-6 py-4 flex items-center gap-3" style="background:linear-gradient(90deg,#f0f9ff,#fff); border-bottom:1px solid #bae6fd;">
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);">
+                    <i class="fas fa-filter text-white text-sm"></i>
+                </div>
+                <div>
+                    <h2 class="font-bold text-slate-700">เลือก Income</h2>
+                    <p class="text-xs text-slate-400">กรองข้อมูลตามประเภท Income</p>
+                </div>
+            </div>
+            <div class="px-6 py-5 flex items-end gap-3 flex-wrap">
+                <div class="flex-1 min-w-[220px]">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Income</label>
+                    <select id="incomeSelect" class="w-full px-4 py-2.5 text-sm">
+                        <option value="">⏳ กำลังโหลด...</option>
+                    </select>
+                </div>
+                <button onclick="loadData()" class="search-btn px-6 py-2.5 flex items-center gap-2 text-sm">
+                    <i class="fas fa-search"></i><span>ดูข้อมูล</span>
+                </button>
+                <button onclick="window.print()" class="print-btn px-4 py-2.5 flex items-center gap-2 text-sm">
+                    <i class="fas fa-print"></i><span>พิมพ์</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Data -->
+        <div class="card p-6">
+            <div id="dataSection">
+                <div class="text-center py-16" style="color:#7dd3fc;">
+                    <i class="fas fa-table text-6xl mb-4 opacity-40"></i>
+                    <p class="text-base font-medium" style="color:#0ea5e9;">เลือก Income แล้วกด <strong>ดูข้อมูล</strong></p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Log Modal -->
+    <div id="logModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+            <div class="text-white px-6 py-4 rounded-t-2xl flex items-center justify-between flex-shrink-0"
+                 style="background:linear-gradient(135deg,#f59e0b,#d97706);">
+                <div>
+                    <h3 class="text-lg font-bold"><i class="fas fa-history mr-2"></i>ประวัติการแก้ไข</h3>
+                    <p class="text-amber-100 text-xs mt-0.5">รหัส: <span id="logIcodeLabel" class="font-mono font-bold"></span></p>
+                </div>
+                <button onclick="closeLogModal()" class="text-white hover:text-amber-200 text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="logContent" class="p-6 overflow-y-auto flex-1"></div>
+            <div class="px-6 pb-4 flex-shrink-0 text-right border-t pt-4">
+                <button onclick="closeLogModal()"
+                    class="px-6 py-2 rounded-xl text-sm font-semibold text-white transition"
+                    style="background:linear-gradient(135deg,#64748b,#475569);">
+                    <i class="fas fa-times mr-2"></i>ปิด
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center py-5 mt-6 text-xs text-gray-400">
+        P4P Management System v1.0 · โรงพยาบาลพุทธชินราช
+    </footer>
+
+    <script src="auth-guard.js"></script>
+    <script>
+        const API_URL = 'http://localhost:3009/api/p4p';
+
+        function getToken() { return sessionStorage.getItem('p4p_token') || ''; }
+        function authHeaders() { return { 'Authorization': `Bearer ${getToken()}` }; }
+
+        function showAlert(msg, type = 'success') {
+            const el = document.getElementById('alert');
+            const color = type === 'error' ? 'bg-red-100 border-red-500 text-red-800'
+                        : type === 'info'  ? 'bg-blue-100 border-blue-500 text-blue-800'
+                        : 'bg-green-100 border-green-500 text-green-800';
+            el.className = `border-l-4 ${color} p-4 rounded-xl`;
+            el.innerHTML = `<div class="flex items-center"><span class="mr-3">${type==='error'?'❌':'✅'}</span><div class="flex-1">${msg}</div><button onclick="document.getElementById('alert').classList.add('hidden')" class="ml-4 text-gray-500"><i class="fas fa-times"></i></button></div>`;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 6000);
+        }
+
+        async function loadIncomeList() {
+            const select = document.getElementById('incomeSelect');
+            try {
+                const res = await fetch(`${API_URL}/tmp-income-list`, { headers: authHeaders() });
+                const result = await res.json();
+                select.innerHTML = '<option value="">-- ทั้งหมด --</option>';
+                if (result.success && result.data.length > 0) {
+                    result.data.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.income_name;
+                        opt.textContent = `${item.income_name} (${item.item_count} รายการ)`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">-- ไม่พบข้อมูล --</option>';
+                }
+            } catch (err) {
+                select.innerHTML = '<option value="">-- โหลดไม่สำเร็จ --</option>';
+            }
+        }
+
+        async function loadData() {
+            const income = document.getElementById('incomeSelect').value;
+            const incomeName = income || 'ทั้งหมด';
+            const section = document.getElementById('dataSection');
+            section.innerHTML = `<div class="text-center py-16" style="color:#0ea5e9;"><i class="fas fa-spinner fa-spin text-4xl mb-4"></i><p class="text-sm mt-2">กำลังโหลดข้อมูล...</p></div>`;
+
+            try {
+                let url = `${API_URL}/tmp-p4p-point?limit=2000`;
+                if (income) url += `&income_name=${encodeURIComponent(income)}`;
+
+                const res = await fetch(url, { headers: authHeaders() });
+                const result = await res.json();
+
+                if (!result.success) { showAlert('โหลดข้อมูลไม่สำเร็จ', 'error'); return; }
+
+                if (result.data.length === 0) {
+                    section.innerHTML = `<div class="text-center py-16" style="color:#7dd3fc;"><i class="fas fa-inbox text-5xl mb-4 opacity-40"></i><p class="font-medium" style="color:#0ea5e9;">ไม่พบข้อมูล</p></div>`;
+                    return;
+                }
+
+                const totalPointNew = result.data.reduce((s, r) => s + (parseFloat(r.point_new) || 0), 0);
+
+                section.innerHTML = `
+                    <div class="flex items-center gap-4 mb-5 p-4 rounded-2xl" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe); border:1.5px solid #bae6fd;">
+                        <div class="rounded-xl p-3" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);">
+                            <i class="fas fa-layer-group text-white text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-sky-800">Income: ${incomeName}</p>
+                            <p class="text-sky-600 text-sm">${result.count} รายการ &nbsp;|&nbsp; รวม Point: <strong>${totalPointNew.toFixed(2)}</strong></p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto rounded-2xl overflow-hidden" style="box-shadow:0 4px 20px rgba(14,165,233,0.12);">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-center w-10">#</th>
+                                    <th class="text-left">รหัส</th>
+                                    <th class="text-left">Income</th>
+                                    <th class="text-left">ชื่อรายการ</th>
+                                    <th class="text-right">ราคา</th>
+                                    <th class="text-right">Point เดิม</th>
+                                    <th class="text-right">Point ใหม่</th>
+                                    <th class="text-center">Log</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${result.data.map((item, i) => `
+                                    <tr>
+                                        <td class="text-center text-slate-400 text-xs">${i + 1}</td>
+                                        <td class="font-mono font-semibold" style="color:#0284c7;">${item.icode || '-'}</td>
+                                        <td class="text-slate-500">${item.income_name || '-'}</td>
+                                        <td class="text-slate-700">${item.meaning || '-'}</td>
+                                        <td class="text-right text-slate-600">${item.price ? parseFloat(item.price).toFixed(2) : '0.00'}</td>
+                                        <td class="text-right font-semibold" style="color:#ef4444;">${item.point_old != null ? parseFloat(item.point_old).toFixed(2) : '-'}</td>
+                                        <td class="text-right font-bold" style="color:#0284c7;">${item.point_new != null ? parseFloat(item.point_new).toFixed(2) : '-'}</td>
+                                        <td class="text-center">
+                                            <button onclick="openLogModal('${item.icode}')" class="log-btn">
+                                                <i class="fas fa-history mr-1"></i>Log
+                                            </button>
+                                        </td>
+                                    </tr>`).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="6" class="text-right text-sm">รวม Point ทั้งหมด (${result.count} รายการ):</td>
+                                    <td class="text-right text-lg">${totalPointNew.toFixed(2)}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>`;
+            } catch (err) {
+                section.innerHTML = `<div class="text-center py-16 text-red-400"><i class="fas fa-times-circle text-5xl mb-4"></i><p>เกิดข้อผิดพลาด: ${err.message}</p></div>`;
+            }
+        }
+
+        async function openLogModal(icode) {
+            document.getElementById('logIcodeLabel').textContent = icode;
+            document.getElementById('logContent').innerHTML =
+                '<p class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>กำลังโหลด...</p>';
+            document.getElementById('logModal').classList.remove('hidden');
+
+            try {
+                const res = await fetch(`${API_URL}/p4p-doctor-point/${icode}/logs`, { headers: authHeaders() });
+                const result = await res.json();
+
+                if (result.success && result.data.length > 0) {
+                    document.getElementById('logContent').innerHTML = `
+                        <table class="min-w-full text-sm divide-y divide-gray-100">
+                            <thead style="background:#fff8e1;">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-bold text-amber-700 uppercase">วันที่/เวลา</th>
+                                    <th class="px-4 py-2 text-right text-xs font-bold text-amber-700 uppercase">Point เดิม</th>
+                                    <th class="px-4 py-2 text-right text-xs font-bold text-amber-700 uppercase">Point ใหม่</th>
+                                    <th class="px-4 py-2 text-left text-xs font-bold text-amber-700 uppercase">โดย</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${result.data.map((log, i) => `
+                                    <tr class="${i === 0 ? 'bg-amber-50' : 'hover:bg-gray-50'}">
+                                        <td class="px-4 py-2.5 text-gray-600">${new Date(log.update_datetime).toLocaleString('th-TH')}</td>
+                                        <td class="px-4 py-2.5 text-right font-semibold text-red-500">${log.point_old != null ? parseFloat(log.point_old).toFixed(2) : '-'}</td>
+                                        <td class="px-4 py-2.5 text-right font-bold text-green-600">${log.point_new != null ? parseFloat(log.point_new).toFixed(2) : '-'}</td>
+                                        <td class="px-4 py-2.5 text-gray-700">${log.officer_name || '-'}${i === 0 ? ' <span class="ml-1 bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-semibold">ล่าสุด</span>' : ''}</td>
+                                    </tr>`).join('')}
+                            </tbody>
+                        </table>`;
+                } else {
+                    document.getElementById('logContent').innerHTML =
+                        '<p class="text-center py-10 text-gray-400"><i class="fas fa-inbox text-3xl mb-2 block"></i>ยังไม่มีประวัติการแก้ไข</p>';
+                }
+            } catch (err) {
+                document.getElementById('logContent').innerHTML =
+                    `<p class="text-center py-8 text-red-400">เกิดข้อผิดพลาด: ${err.message}</p>`;
+            }
+        }
+
+        function closeLogModal() { document.getElementById('logModal').classList.add('hidden'); }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLogModal(); });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const officer = await requireAuth();
+            if (officer) renderUserBar(officer);
+            await loadIncomeList();
+        });
+    </script>
+</body>
+</html>

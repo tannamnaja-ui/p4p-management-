@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตั้งค่า Position - P4P System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background: #f8faff; }
+        .main-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .card { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(245,87,108,0.10); border: 1px solid rgba(245,87,108,0.10); }
+
+        .dept-card {
+            background: #fff;
+            border-radius: 16px;
+            border: 2px solid #fce7f3;
+            transition: all 0.2s;
+        }
+        .dept-card:hover { border-color: #f472b6; box-shadow: 0 6px 20px rgba(244,114,182,0.15); }
+
+        .dept-badge {
+            width: 38px; height: 38px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 1rem; color: #fff; flex-shrink: 0;
+        }
+
+        /* multi-select checkbox list */
+        .pos-item {
+            border-radius: 10px; border: 1.5px solid #fce7f3;
+            transition: all 0.12s; cursor: pointer; user-select: none;
+        }
+        .pos-item:hover { border-color: #f472b6; background: #fdf2f8; }
+        .pos-item.checked { border-color: #f5576c; background: #fff0f3; }
+
+        input[type="text"] {
+            border: 1.5px solid #fce7f3; border-radius: 12px; background: #fff8fc; transition: all 0.15s;
+        }
+        input[type="text"]:focus {
+            outline: none; border-color: #f5576c; box-shadow: 0 0 0 3px rgba(245,87,108,0.15); background: #fff;
+        }
+        .btn-save {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: #fff; border-radius: 12px; font-weight: 700;
+            box-shadow: 0 4px 14px rgba(245,87,108,0.35); transition: all 0.2s;
+        }
+        .btn-save:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(245,87,108,0.45); }
+        .btn-save:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="main-header text-white shadow-xl">
+        <div class="container mx-auto px-6 py-5 flex items-center justify-between max-w-6xl">
+            <div class="flex items-center gap-4">
+                <a href="p4p-import.html" class="bg-white bg-opacity-15 hover:bg-opacity-25 border border-white border-opacity-25 text-white px-3 py-2 rounded-xl transition text-sm flex items-center gap-2">
+                    <i class="fas fa-arrow-left text-xs"></i><span>กลับ</span>
+                </a>
+                <div>
+                    <h1 class="text-xl font-bold flex items-center gap-2">
+                        <i class="fas fa-sitemap opacity-90"></i>ตั้งค่า Position ของแต่ละหน่วยงาน
+                    </h1>
+                    <p class="text-pink-100 text-xs mt-0.5 opacity-80">กำหนด Position ที่ใช้กับแต่ละหน่วยงาน</p>
+                </div>
+            </div>
+            <div id="userBar" class="hidden"></div>
+        </div>
+        <div class="h-1" style="background: linear-gradient(90deg,#f5576c,#f093fb,#667eea,#11998e);"></div>
+    </header>
+
+    <main class="flex-1 container mx-auto px-6 py-7 max-w-5xl">
+
+        <div id="alert" class="hidden mb-5"></div>
+
+        <!-- Loading positions -->
+        <div id="loadingPos" class="text-center py-10 text-pink-300">
+            <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+            <p class="text-sm">กำลังโหลดข้อมูล Position...</p>
+        </div>
+
+        <div id="deptContainer" class="hidden space-y-4"></div>
+
+    </main>
+
+    <footer class="text-center py-4 mt-6 text-xs text-gray-400">
+        P4P Management System v1.0 · โรงพยาบาลพุทธชินราช
+    </footer>
+
+    <script src="auth-guard.js"></script>
+    <script>
+        const API_URL = 'http://localhost:3009/api/p4p';
+
+        const DEPTS = [
+            { code: 1, label: 'แพทย์',           icon: 'fa-user-md',    color: '#1e40af,#3b82f6' },
+            { code: 2, label: 'ทันตแพทย์',        icon: 'fa-tooth',      color: '#9333ea,#c084fc' },
+            { code: 3, label: 'วิสัญญี',          icon: 'fa-syringe',    color: '#0891b2,#22d3ee' },
+            { code: 4, label: 'ผ่าตัด',           icon: 'fa-cut',        color: '#b45309,#f59e0b' },
+            { code: 5, label: 'แพทย์แผนไทย',      icon: 'fa-leaf',       color: '#065f46,#10b981' },
+            { code: 6, label: 'กายภาพบำบัด',      icon: 'fa-running',    color: '#be185d,#f472b6' },
+            { code: 7, label: 'พยาบาล IPD',       icon: 'fa-procedures', color: '#0e7490,#38bdf8' },
+            { code: 8, label: 'พยาบาล OPD',       icon: 'fa-stethoscope',color: '#4c1d95,#818cf8' },
+        ];
+
+        function getToken() { return sessionStorage.getItem('p4p_token') || ''; }
+        function authH() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }; }
+
+        function showAlert(msg, type = 'success') {
+            const el = document.getElementById('alert');
+            const c = type === 'error' ? 'bg-red-100 border-red-400 text-red-800' : 'bg-green-100 border-green-400 text-green-800';
+            el.className = `border-l-4 ${c} p-4 rounded-xl mb-5`;
+            el.innerHTML = `<div class="flex items-center gap-3"><span>${type==='error'?'❌':'✅'}</span><div class="flex-1">${msg}</div></div>`;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 4000);
+        }
+
+        let allPositions = [];
+        // dept_code -> Set of selected position_ids
+        const deptSelected = {};
+
+        async function loadData() {
+            try {
+                // โหลด positions ทั้งหมด
+                const res = await fetch(`${API_URL}/doctor-positions`, { headers: authH() });
+                const result = await res.json();
+                if (!result.success) throw new Error(result.error);
+                allPositions = result.data;
+
+                // โหลด mapping ของแต่ละ dept
+                await Promise.all(DEPTS.map(async d => {
+                    const r = await fetch(`${API_URL}/doctor-positions/dept/${d.code}`, { headers: authH() });
+                    const data = await r.json();
+                    deptSelected[d.code] = new Set(
+                        data.success ? data.data.map(p => String(p.id)) : []
+                    );
+                }));
+
+                renderDepts();
+            } catch (err) {
+                document.getElementById('loadingPos').innerHTML =
+                    `<p class="text-red-400">เกิดข้อผิดพลาด: ${err.message}</p>`;
+                return;
+            }
+            document.getElementById('loadingPos').classList.add('hidden');
+            document.getElementById('deptContainer').classList.remove('hidden');
+        }
+
+        function renderDepts() {
+            const container = document.getElementById('deptContainer');
+            container.innerHTML = DEPTS.map(dept => {
+                const [c1, c2] = dept.color.split(',');
+                return `
+                <div class="dept-card p-5" id="dept-card-${dept.code}">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="dept-badge" style="background:linear-gradient(135deg,${c1},${c2});">
+                            <i class="fas ${dept.icon}"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white" style="background:linear-gradient(135deg,${c1},${c2});">${dept.code}</span>
+                                <h3 class="font-bold text-slate-800">${dept.label}</h3>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-0.5">
+                                เลือกได้หลาย Position · เลือกแล้ว
+                                <span id="count-${dept.code}" class="font-bold text-pink-600">${deptSelected[dept.code].size}</span> รายการ
+                            </p>
+                        </div>
+                        <button onclick="saveDept(${dept.code})" id="save-${dept.code}"
+                            class="btn-save px-4 py-2 text-sm flex items-center gap-2">
+                            <i class="fas fa-save"></i>บันทึก
+                        </button>
+                    </div>
+
+                    <input type="text" placeholder="ค้นหา position..."
+                        class="w-full px-3 py-2 text-sm mb-3"
+                        oninput="filterPos(${dept.code}, this.value)">
+
+                    <div id="poslist-${dept.code}" class="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                        ${renderPosList(dept.code, allPositions)}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderPosList(deptCode, positions) {
+            if (positions.length === 0) return `<p class="col-span-2 text-center py-4 text-slate-300 text-sm">ไม่พบ Position</p>`;
+            return positions.map(p => {
+                const checked = deptSelected[deptCode].has(String(p.id));
+                return `<label class="pos-item flex items-center gap-3 p-2.5 ${checked ? 'checked' : ''}">
+                    <input type="checkbox" class="w-4 h-4 accent-pink-500"
+                        value="${p.id}"
+                        ${checked ? 'checked' : ''}
+                        onchange="togglePos(${deptCode}, '${p.id}', this.checked, this.closest('label'))">
+                    <span class="text-sm text-slate-700">${p.name}</span>
+                </label>`;
+            }).join('');
+        }
+
+        function filterPos(deptCode, q) {
+            const filtered = q
+                ? allPositions.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
+                : allPositions;
+            document.getElementById(`poslist-${deptCode}`).innerHTML = renderPosList(deptCode, filtered);
+        }
+
+        function togglePos(deptCode, posId, checked, label) {
+            if (checked) {
+                deptSelected[deptCode].add(String(posId));
+                label.classList.add('checked');
+            } else {
+                deptSelected[deptCode].delete(String(posId));
+                label.classList.remove('checked');
+            }
+            document.getElementById(`count-${deptCode}`).textContent = deptSelected[deptCode].size;
+        }
+
+        async function saveDept(deptCode) {
+            const btn = document.getElementById(`save-${deptCode}`);
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>กำลังบันทึก...';
+            try {
+                const position_ids = [...deptSelected[deptCode]];
+                const res = await fetch(`${API_URL}/doctor-positions/dept/${deptCode}`, {
+                    method: 'PUT',
+                    headers: authH(),
+                    body: JSON.stringify({ position_ids })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showAlert(`บันทึก Position สำหรับหน่วยงาน ${DEPTS.find(d=>d.code===deptCode)?.label} สำเร็จ`);
+                } else {
+                    showAlert(result.error, 'error');
+                }
+            } catch (err) {
+                showAlert('เกิดข้อผิดพลาด: ' + err.message, 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i>บันทึก';
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const officer = await requireAuth();
+            if (officer) renderUserBar(officer);
+            await loadData();
+        });
+    </script>
+</body>
+</html>

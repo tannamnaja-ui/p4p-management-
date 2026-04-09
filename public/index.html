@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบ P4P - โรงพยาบาลพุทธชินราช</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        .menu-card {
+            transition: all 0.25s ease;
+            cursor: pointer;
+        }
+        .menu-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 24px 48px rgba(0,0,0,0.13);
+        }
+        .menu-card:hover .card-arrow {
+            transform: translateX(4px);
+            opacity: 1;
+        }
+        .card-arrow { transition: all 0.25s ease; opacity: 0.4; }
+        .hero-bg {
+            background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 40%, #0369a1 100%);
+        }
+        #dbModal { display: none; }
+        #dbModal.show { display: flex; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="hero-bg text-white shadow-2xl">
+        <div class="container mx-auto px-6 py-6 flex items-center justify-between max-w-6xl">
+            <div class="flex items-center space-x-4">
+                <div class="bg-white bg-opacity-15 backdrop-blur rounded-2xl p-3.5 border border-white border-opacity-20">
+                    <i class="fas fa-hospital-alt text-3xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-2xl font-bold tracking-wide">ระบบบริหาร P4P</h1>
+                        <span class="bg-white bg-opacity-20 text-white text-xs px-2.5 py-1 rounded-full font-medium border border-white border-opacity-30">v1.0</span>
+                    </div>
+                    <p class="text-blue-200 text-sm mt-0.5"><span id="hospitalName">โรงพยาบาลพุทธชินราช</span> · Pay for Performance</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <div id="userBar" class="hidden"></div>
+                <button onclick="openDbModal()" id="dbStatusBtn"
+                    class="flex items-center gap-2.5 bg-white bg-opacity-10 hover:bg-opacity-20 border border-white border-opacity-20 text-white px-4 py-2.5 rounded-xl transition">
+                    <i class="fas fa-database text-sm"></i>
+                    <div class="text-left">
+                        <div class="text-xs text-blue-200 leading-none mb-0.5">ฐานข้อมูล</div>
+                        <div id="dbStatusText" class="text-sm font-semibold leading-none">ตั้งค่าการเชื่อมต่อ</div>
+                    </div>
+                    <span id="dbStatusDot" class="w-2.5 h-2.5 rounded-full bg-red-400"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Wave divider -->
+        <div class="relative h-10 overflow-hidden">
+            <svg viewBox="0 0 1440 40" preserveAspectRatio="none" class="absolute bottom-0 w-full h-full">
+                <path d="M0,20 C360,40 1080,0 1440,20 L1440,40 L0,40 Z" fill="#f1f5f9"/>
+            </svg>
+        </div>
+    </header>
+
+    <main class="flex-1 container mx-auto px-6 py-8 max-w-6xl">
+
+        <!-- DB Warning -->
+        <div id="dbWarning" class="hidden mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+            <div class="bg-amber-100 rounded-xl p-2.5 flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-amber-500 text-lg"></i>
+            </div>
+            <div class="flex-1">
+                <p class="font-semibold text-amber-800">ยังไม่ได้เชื่อมต่อฐานข้อมูล</p>
+                <p class="text-sm text-amber-700 mt-0.5">กรุณาตั้งค่าการเชื่อมต่อก่อนใช้งาน
+                    <button onclick="openDbModal()" class="underline font-semibold hover:text-amber-900">คลิกที่นี่</button>
+                </p>
+            </div>
+        </div>
+
+        <!-- Section Title -->
+        <div class="mb-7 text-center">
+            <h2 class="text-2xl font-bold text-slate-700">เมนูหลัก</h2>
+            <p class="text-slate-400 text-sm mt-1">เลือกรายการที่ต้องการใช้งาน</p>
+        </div>
+
+        <!-- Menu Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+            <!-- Card 1: Import -->
+            <a href="p4p-import.html" class="menu-card block rounded-2xl overflow-hidden"
+               style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #0ea5e9 100%);">
+                <div class="p-8 flex flex-col h-full">
+                    <div class="flex items-center justify-between mb-5">
+                        <div class="bg-white bg-opacity-20 rounded-2xl p-4 backdrop-blur border border-white border-opacity-20">
+                            <i class="fas fa-file-import text-white text-2xl"></i>
+                        </div>
+                        <i class="fas fa-chevron-right card-arrow text-white text-opacity-60 text-xl"></i>
+                    </div>
+                    <div class="mt-auto">
+                        <h3 class="text-xl font-bold text-white mb-2">จัดการข้อมูล P4P</h3>
+                        <p class="text-blue-100 text-sm leading-relaxed mb-5">
+                            นำเข้าและจัดการรายการ Point จาก nondrugitems<br>
+                            พร้อมดูประวัติการแก้ไขทั้งหมด
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-20">Import ข้อมูล</span>
+                            <span class="bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-20">แก้ไข Point</span>
+                            <span class="bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-20">ประวัติ Log</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <!-- Card 2: Report -->
+            <a href="report-select.html" class="menu-card block rounded-2xl overflow-hidden"
+               style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #06b6d4 100%);">
+                <div class="p-8 flex flex-col h-full">
+                    <div class="flex items-center justify-between mb-5">
+                        <div class="bg-white bg-opacity-20 rounded-2xl p-4 backdrop-blur border border-white border-opacity-20">
+                            <i class="fas fa-chart-bar text-white text-2xl"></i>
+                        </div>
+                        <i class="fas fa-chevron-right card-arrow text-white text-opacity-60 text-xl"></i>
+                    </div>
+                    <div class="mt-auto">
+                        <h3 class="text-xl font-bold text-white mb-2">รายงาน P4P</h3>
+                        <p class="text-teal-100 text-sm leading-relaxed mb-5">
+                            ดูรายงานการให้บริการตามรายการ P4P<br>
+                            เลือกแพทย์ วันที่ และ Income พร้อม Export CSV
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-20">รายงาน</span>
+                            <span class="bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-20">เลือกแพทย์</span>
+                            <span class="bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-20">Export CSV</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- DB Info Card -->
+        <div id="dbInfoCard" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">ข้อมูลการเชื่อมต่อฐานข้อมูล</h3>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-slate-400 text-xs mb-1">ประเภท</p>
+                    <p id="infoType" class="font-bold text-slate-700">-</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-slate-400 text-xs mb-1">Host</p>
+                    <p id="infoHost" class="font-bold text-slate-700 truncate">-</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-slate-400 text-xs mb-1">Database</p>
+                    <p id="infoDb" class="font-bold text-slate-700 truncate">-</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-slate-400 text-xs mb-1">User</p>
+                    <p id="infoUser" class="font-bold text-slate-700">-</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-white py-5 mt-6">
+        <div class="container mx-auto px-6 max-w-6xl flex items-center justify-between">
+            <p class="text-sm text-slate-400">P4P Management System v1.0 &nbsp;·&nbsp; โรงพยาบาลพุทธชินราช</p>
+            <p class="text-xs text-slate-500">IM Department</p>
+        </div>
+    </footer>
+
+    <!-- Modal ตั้งค่าฐานข้อมูล -->
+    <div id="dbModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4" onclick="event.stopPropagation()">
+
+            <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-database text-xl"></i>
+                    <div>
+                        <h3 class="text-lg font-bold">ตั้งค่าการเชื่อมต่อฐานข้อมูล</h3>
+                        <p class="text-blue-200 text-xs mt-0.5">กำหนดข้อมูลการเชื่อมต่อ Database</p>
+                    </div>
+                </div>
+                <button onclick="closeDbModal()" class="text-white hover:text-blue-200 text-xl">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div id="modalConnStatus" class="hidden text-sm text-center py-2 px-4 rounded-lg font-semibold"></div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        <i class="fas fa-server mr-1 text-blue-500"></i>ประเภทฐานข้อมูล
+                    </label>
+                    <select id="dbType" onchange="setDefaultPort()"
+                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                        <option value="">-- เลือกประเภท --</option>
+                        <option value="postgresql">PostgreSQL</option>
+                        <option value="mysql">MySQL</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        <i class="fas fa-network-wired mr-1 text-blue-500"></i>IP / Host
+                    </label>
+                    <input id="dbHost" type="text" placeholder="เช่น 192.168.1.100 หรือ localhost"
+                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            <i class="fas fa-plug mr-1 text-blue-500"></i>Port
+                        </label>
+                        <input id="dbPort" type="number" placeholder="5432"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            <i class="fas fa-database mr-1 text-blue-500"></i>Database
+                        </label>
+                        <input id="dbName" type="text" placeholder="ชื่อ database"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        <i class="fas fa-user mr-1 text-blue-500"></i>Username
+                    </label>
+                    <input id="dbUser" type="text" placeholder="ชื่อผู้ใช้"
+                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        <i class="fas fa-lock mr-1 text-blue-500"></i>Password
+                    </label>
+                    <div class="relative">
+                        <input id="dbPassword" type="password" placeholder="รหัสผ่าน"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm pr-10">
+                        <button type="button" onclick="togglePassword()"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <i id="pwEyeIcon" class="fas fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="testResult" class="hidden text-sm p-3 rounded-lg"></div>
+            </div>
+
+            <div class="px-6 pb-6 flex flex-col space-y-2">
+                <div class="flex space-x-2">
+                    <button onclick="testDbConnection()"
+                        class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 px-4 rounded-lg transition text-sm">
+                        <i class="fas fa-vial mr-2"></i>ทดสอบการเชื่อมต่อ
+                    </button>
+                    <button onclick="saveDbConnection()"
+                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition text-sm">
+                        <i class="fas fa-save mr-2"></i>บันทึกและเชื่อมต่อ
+                    </button>
+                </div>
+                <button id="createTablesBtn" onclick="createTables()"
+                    class="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 px-4 rounded-lg transition text-sm">
+                    <i class="fas fa-table mr-2"></i>สร้างตาราง P4P
+                </button>
+                <div id="createTableResult" class="hidden text-sm"></div>
+                <button onclick="clearDbConnection()"
+                    class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-2 px-4 rounded-lg transition text-sm border border-red-200">
+                    <i class="fas fa-trash-alt mr-2"></i>ล้างการเชื่อมต่อ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth-guard.js"></script>
+    <script src="home.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const officer = await requireAuth();
+            if (officer) renderUserBar(officer);
+        });
+    </script>
+</body>
+</html>

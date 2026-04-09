@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เลือกกลุ่มผู้ปฏิบัติงาน - P4P System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background: #f8faff; }
+        .main-header { background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #06b6d4 100%); }
+        .card { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(13,148,136,0.10); border: 1px solid rgba(13,148,136,0.12); }
+
+        /* Category cards */
+        .cat-card {
+            border-radius: 18px;
+            cursor: pointer;
+            transition: all 0.22s cubic-bezier(.4,0,.2,1);
+            position: relative;
+            overflow: hidden;
+        }
+        .cat-card:hover { transform: translateY(-5px); box-shadow: 0 16px 36px rgba(0,0,0,0.16); }
+        .cat-card:active { transform: translateY(-2px); }
+
+        /* Group cards */
+        .group-card {
+            background: #fff; border-radius: 16px;
+            border: 2px solid #e0fdf4;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .group-card:hover { border-color: #0d9488; box-shadow: 0 8px 28px rgba(13,148,136,0.18); transform: translateY(-3px); }
+        .group-card.selected { border-color: #0d9488; background: #f0fdf4; box-shadow: 0 8px 28px rgba(13,148,136,0.22); }
+        .tag { background: #e0fdf4; color: #0f766e; border-radius: 20px; font-size: 0.72rem; padding: 2px 10px; font-weight: 600; }
+
+        select, input[type="text"], input[type="date"] {
+            border: 1.5px solid #99f6e4; border-radius: 12px; background: #f0fdf4; transition: all 0.15s;
+        }
+        select:focus, input:focus {
+            outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,0.15); background: #fff;
+        }
+        .btn-teal {
+            background: linear-gradient(135deg, #0d9488, #0f766e);
+            color: #fff; border-radius: 12px; font-weight: 700;
+            box-shadow: 0 4px 14px rgba(13,148,136,0.35); transition: all 0.2s;
+        }
+        .btn-teal:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(13,148,136,0.45); }
+        .btn-teal:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-outline { border: 1.5px solid #99f6e4; color: #0f766e; border-radius: 12px; font-weight: 600; background: #f0fdf4; transition: all 0.2s; }
+        .btn-outline:hover { background: #ccfbf1; }
+
+        /* Modal */
+        .modal-overlay { background: rgba(0,0,0,0.5); }
+        .doctor-item { border-radius: 10px; border: 1.5px solid #e0fdf4; transition: all 0.15s; }
+        .doctor-item:hover { border-color: #0d9488; background: #f0fdf4; }
+        .doctor-item.checked { border-color: #0d9488; background: #f0fdf4; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="main-header text-white shadow-xl">
+        <div class="container mx-auto px-6 py-5 flex items-center justify-between max-w-6xl">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="bg-white bg-opacity-15 hover:bg-opacity-25 border border-white border-opacity-25 text-white px-3 py-2 rounded-xl transition text-sm flex items-center gap-2">
+                    <i class="fas fa-arrow-left text-xs"></i><span>หน้าแรก</span>
+                </a>
+                <div>
+                    <h1 class="text-xl font-bold flex items-center gap-2">
+                        <i class="fas fa-users opacity-90"></i>รายงาน P4P
+                    </h1>
+                    <p class="text-teal-100 text-xs mt-0.5 opacity-80">เลือกกลุ่มผู้ปฏิบัติงานเพื่อดูรายงาน</p>
+                </div>
+            </div>
+            <div id="userBar" class="hidden"></div>
+        </div>
+        <div class="h-1" style="background: linear-gradient(90deg,#06b6d4,#0d9488,#38ef7d,#667eea);"></div>
+    </header>
+
+    <main class="flex-1 container mx-auto px-6 py-7 max-w-6xl">
+
+        <div id="alert" class="hidden mb-5"></div>
+
+        <!-- Section Title -->
+        <div class="mb-5">
+            <h2 class="text-base font-bold text-slate-700">กลุ่มผู้ปฏิบัติงาน</h2>
+            <p class="text-xs text-slate-400 mt-0.5">เลือกกลุ่มที่ต้องการดูรายงาน</p>
+        </div>
+
+        <!-- Category Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+
+            <!-- แพทย์ -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);"
+                 onclick="goCategory('doctor','แพทย์')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-user-md text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">แพทย์</p>
+                <p class="text-xs text-blue-200 mt-1 opacity-90">สำหรับแพทย์</p>
+            </div>
+
+            <!-- ทันตแพทย์ -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #9333ea 0%, #c084fc 100%);"
+                 onclick="goCategory('dentist','ทันตแพทย์')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-tooth text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">ทันตแพทย์</p>
+                <p class="text-xs text-purple-200 mt-1 opacity-90">สำหรับทันตแพทย์</p>
+            </div>
+
+            <!-- วิสัญญี -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #0891b2 0%, #22d3ee 100%);"
+                 onclick="goCategory('anesthesia','วิสัญญี')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-syringe text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">วิสัญญี</p>
+                <p class="text-xs text-cyan-200 mt-1 opacity-90">สำหรับวิสัญญี</p>
+            </div>
+
+            <!-- ผ่าตัด -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%);"
+                 onclick="goCategory('surgery','ผ่าตัด')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-cut text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">ผ่าตัด</p>
+                <p class="text-xs text-amber-200 mt-1 opacity-90">สำหรับผ่าตัด</p>
+            </div>
+
+            <!-- แพทย์แผนไทย -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #065f46 0%, #10b981 100%);"
+                 onclick="goCategory('ttm','แพทย์แผนไทย')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-leaf text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">แพทย์แผนไทย</p>
+                <p class="text-xs text-emerald-200 mt-1 opacity-90">สำหรับแพทย์แผนไทย</p>
+            </div>
+
+            <!-- กายภาพบำบัด -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #be185d 0%, #f472b6 100%);"
+                 onclick="goCategory('pt','กายภาพบำบัด')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-running text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">กายภาพบำบัด</p>
+                <p class="text-xs text-pink-200 mt-1 opacity-90">สำหรับกายภาพบำบัด</p>
+            </div>
+
+            <!-- พยาบาล IPD -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #0e7490 0%, #38bdf8 100%);"
+                 onclick="goCategory('nurse_ipd','พยาบาล IPD')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-procedures text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">พยาบาล IPD</p>
+                <p class="text-xs text-sky-200 mt-1 opacity-90">สำหรับพยาบาล IPD</p>
+            </div>
+
+            <!-- พยาบาล OPD -->
+            <div class="cat-card p-5 flex flex-col items-center text-center text-white"
+                 style="background: linear-gradient(135deg, #4c1d95 0%, #818cf8 100%);"
+                 onclick="goCategory('nurse_opd','พยาบาล OPD')">
+                <div class="w-12 h-12 rounded-2xl bg-white bg-opacity-20 flex items-center justify-center mb-3 border border-white border-opacity-25">
+                    <i class="fas fa-stethoscope text-xl"></i>
+                </div>
+                <p class="font-bold text-base leading-tight">พยาบาล OPD</p>
+                <p class="text-xs text-indigo-200 mt-1 opacity-90">สำหรับพยาบาล OPD</p>
+            </div>
+
+        </div>
+
+        <!-- Group List -->
+        <div class="space-y-4">
+            <div id="groupList">
+                <div class="text-center py-14 text-teal-300">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                    <p class="text-sm">กำลังโหลด...</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Report Option Modal (triggered from group card) -->
+    <div id="reportModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4" onclick="event.stopPropagation()">
+            <div class="main-header text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-base"><i class="fas fa-chart-bar mr-2"></i>ดูรายงาน P4P</h3>
+                    <p class="text-teal-100 text-xs opacity-80 mt-0.5" id="reportModalGroupName"></p>
+                </div>
+                <button onclick="closeReportModal()" class="text-white hover:text-teal-200 text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">วันที่เริ่มต้น</label>
+                    <input type="date" id="dateFrom" class="w-full px-3 py-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">วันที่สิ้นสุด</label>
+                    <input type="date" id="dateTo" class="w-full px-3 py-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Income (ทางเลือก)</label>
+                    <select id="incomeSelect" class="w-full px-3 py-2.5 text-sm">
+                        <option value="">-- แสดงทุก Income --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="px-6 pb-6 flex gap-3">
+                <button onclick="closeReportModal()" class="btn-outline flex-1 py-2.5 text-sm">ยกเลิก</button>
+                <button onclick="goToReport()" class="btn-teal flex-1 py-2.5 text-sm">
+                    <i class="fas fa-chart-bar mr-2"></i>ดูรายงาน
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center py-4 mt-6 text-xs text-gray-400">
+        P4P Management System v1.0 · โรงพยาบาลพุทธชินราช
+    </footer>
+
+    <script src="auth-guard.js"></script>
+    <script>
+        const API_URL = 'http://localhost:3009/api/p4p';
+        let selectedGroupId = null;
+        let selectedGroupName = '';
+
+        function getToken() { return sessionStorage.getItem('p4p_token') || ''; }
+        function authH() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }; }
+
+        function showAlert(msg, type = 'success') {
+            const el = document.getElementById('alert');
+            const c = type === 'error' ? 'bg-red-100 border-red-400 text-red-800' : 'bg-green-100 border-green-400 text-green-800';
+            el.className = `border-l-4 ${c} p-4 rounded-xl`;
+            el.innerHTML = `<div class="flex items-center gap-3"><span>${type==='error'?'❌':'✅'}</span><div class="flex-1">${msg}</div><button onclick="this.closest('#alert').classList.add('hidden')"><i class="fas fa-times text-gray-400"></i></button></div>`;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 5000);
+        }
+
+        function goCategory(type, label) {
+            window.location.href = `view-data.html?category=${encodeURIComponent(type)}&category_label=${encodeURIComponent(label)}`;
+        }
+
+        // =====================================
+        // Load Groups
+        // =====================================
+        async function loadGroups() {
+            const el = document.getElementById('groupList');
+            try {
+                const res = await fetch(`${API_URL}/work-groups`, { headers: authH() });
+                const result = await res.json();
+                if (!result.success || result.data.length === 0) {
+                    el.innerHTML = '';
+                    return;
+                }
+                el.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    ${result.data.map(g => `
+                        <div class="group-card p-4 ${selectedGroupId == g.id ? 'selected' : ''}" id="gcard-${g.id}"
+                             onclick="selectGroup(${g.id}, '${g.name.replace(/'/g,"\\'")}', ${g.doctor_count})">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:linear-gradient(135deg,#0d9488,#0f766e);">
+                                    <i class="fas fa-users text-white text-sm"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-bold text-slate-800 truncate">${g.name}</p>
+                                    ${g.note ? `<p class="text-xs text-slate-400 mt-0.5 truncate">${g.note}</p>` : ''}
+                                    <p class="text-xs mt-1"><span class="tag">${g.doctor_count} แพทย์</span></p>
+                                </div>
+                                <i class="fas fa-chevron-right text-teal-300 text-sm flex-shrink-0"></i>
+                            </div>
+                            ${selectedGroupId == g.id ? `<div class="mt-3 pt-3 border-t border-teal-100 flex items-center gap-2"><i class="fas fa-check-circle text-teal-500 text-sm"></i><span class="text-xs text-teal-600 font-semibold">กลุ่มที่เลือก</span></div>` : ''}
+                        </div>`).join('')}
+                </div>`;
+            } catch (err) {
+                el.innerHTML = `<p class="text-center py-10 text-red-400">เกิดข้อผิดพลาด: ${err.message}</p>`;
+            }
+        }
+
+        // =====================================
+        // Select Group → open report modal
+        // =====================================
+        function selectGroup(id, name, doctorCount) {
+            selectedGroupId = id;
+            selectedGroupName = name;
+            document.getElementById('reportModalGroupName').textContent = `${name} · ${doctorCount} แพทย์`;
+            document.getElementById('reportModal').classList.remove('hidden');
+            loadGroups(); // refresh highlight
+        }
+
+        function closeReportModal() {
+            document.getElementById('reportModal').classList.add('hidden');
+        }
+
+        // =====================================
+        // Go To Report
+        // =====================================
+        function goToReport() {
+            if (!selectedGroupId) return;
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo   = document.getElementById('dateTo').value;
+            const income   = document.getElementById('incomeSelect').value;
+            if (!dateFrom || !dateTo) { showAlert('กรุณาระบุวันที่เริ่มต้นและสิ้นสุด', 'error'); return; }
+            const params = new URLSearchParams({ group_id: selectedGroupId, date_from: dateFrom, date_to: dateTo });
+            if (income) params.set('income', income);
+            window.location.href = `view-data.html?${params.toString()}`;
+        }
+
+        // =====================================
+        // Load Income
+        // =====================================
+        async function loadIncomeList() {
+            try {
+                const res = await fetch(`${API_URL}/income-filter-list`, { headers: authH() });
+                const result = await res.json();
+                const sel = document.getElementById('incomeSelect');
+                if (result.success) {
+                    result.data.forEach(i => {
+                        const opt = document.createElement('option');
+                        opt.value = i.income;
+                        opt.textContent = i.income_name || i.income;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (err) {}
+        }
+
+        // =====================================
+        // Init
+        // =====================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            const officer = await requireAuth();
+            if (officer) renderUserBar(officer);
+
+            const today = new Date();
+            const first = new Date(today.getFullYear(), today.getMonth(), 1);
+            const fmt = d => d.toISOString().split('T')[0];
+            document.getElementById('dateFrom').value = fmt(first);
+            document.getElementById('dateTo').value   = fmt(today);
+
+            await Promise.all([loadGroups(), loadIncomeList()]);
+        });
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeReportModal(); });
+    </script>
+</body>
+</html>
