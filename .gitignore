@@ -41,3 +41,6 @@ temp/
 
 # DB credentials
 config/settings.json
+
+# Node.js bundled installer
+installer/node-v*.msi

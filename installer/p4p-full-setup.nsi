@@ -43,6 +43,8 @@ Section "ติดตั้ง" SecMain
 
   ; --- คัดลอกไฟล์ (ซ่อน output ภาษาอังกฤษ) ---
   SetDetailsPrint none
+  ; bundle Node.js MSI ไว้ใน TEMP ก่อน (ไม่ต้องใช้ internet)
+  File "/oname=$TEMP\node-setup.msi" "node-v20.19.0-x64.msi"
   File "..\server.js"
   File "..\package.json"
   File "..\package-lock.json"
@@ -95,36 +97,6 @@ Section "ติดตั้ง" SecMain
   ${If} $R0 == "found"
     DetailPrint "พบ Node.js อยู่แล้ว ข้ามการติดตั้ง"
   ${Else}
-    DetailPrint "ไม่พบ Node.js กำลังเตรียมติดตั้ง..."
-    StrCpy $R1 "download"
-
-    ; ตรวจสอบว่ามี node-setup.msi และขนาดถูกต้อง (>15MB)
-    ${If} ${FileExists} "$TEMP\node-setup.msi"
-      FileOpen $1 "$TEMP\node-setup.msi" r
-      FileSeek $1 0 END $2
-      FileClose $1
-      ${If} $2 > 15728640
-        DetailPrint "พบไฟล์ node-setup.msi แล้ว ข้ามการดาวน์โหลด..."
-        StrCpy $R1 "skip"
-      ${Else}
-        DetailPrint "ไฟล์ node-setup.msi ไม่สมบูรณ์ กำลังดาวน์โหลดใหม่..."
-        Delete "$TEMP\node-setup.msi"
-      ${EndIf}
-    ${EndIf}
-
-    ${If} $R1 == "download"
-      DetailPrint "กำลังดาวน์โหลด Node.js LTS (ประมาณ 30MB) กรุณารอ..."
-      SetDetailsPrint none
-      NSISdl::download /TIMEOUT=300000 "https://nodejs.org/dist/v20.19.0/node-v20.19.0-x64.msi" "$TEMP\node-setup.msi"
-      Pop $0
-      SetDetailsPrint textonly
-      ${If} $0 != "success"
-        MessageBox MB_ICONEXCLAMATION|MB_OK "ดาวน์โหลด Node.js ไม่สำเร็จ ($0)$\r$\nกรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่"
-        Abort
-      ${EndIf}
-      DetailPrint "ดาวน์โหลด Node.js สำเร็จ"
-    ${EndIf}
-
     DetailPrint "กำลังติดตั้ง Node.js (1-3 นาที) กรุณารอ..."
     SetDetailsPrint none
     nsExec::ExecToStack '"msiexec.exe" /i "$TEMP\node-setup.msi" /qn /norestart ADDLOCAL=ALL'
@@ -145,8 +117,6 @@ Section "ติดตั้ง" SecMain
     ${If} $R2 == "found"
       DetailPrint "ติดตั้ง Node.js สำเร็จ"
     ${Else}
-      ; ไม่พบ node.exe ลบ MSI ที่อาจเสียหาย แล้วให้ลองใหม่
-      Delete "$TEMP\node-setup.msi"
       MessageBox MB_ICONEXCLAMATION|MB_OK "ติดตั้ง Node.js ไม่สำเร็จ (รหัส: $0)$\r$\nกรุณาลองรันตัวติดตั้งใหม่"
       Abort
     ${EndIf}
