@@ -1,6 +1,6 @@
 # Buddhachin Hospital Backend API
 
-Backend API สำหรับเชื่อมต่อกับ PostgreSQL Database โรงพยาบาลพุ
+Backend API สำหรับเชื่อมต่อกับ PostgreSQL Database โรงพยาบาล
 
 ## 📋 ข้อมูลโปรเจค
 
