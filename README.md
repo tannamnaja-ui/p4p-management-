@@ -1,10 +1,10 @@
 # Buddhachin Hospital Backend API
 
-Backend API สำหรับเชื่อมต่อกับ PostgreSQL Database โรงพยาบาลพุทธชินราช
+Backend API สำหรับเชื่อมต่อกับ PostgreSQL Database โรงพยาบาลพุ
 
 ## 📋 ข้อมูลโปรเจค
 
-- **โรงพยาบาล**: โรงพยาบาลพุทธชินราช
+- **โรงพยาบาล**: โรงพยาบาล
 - **Database**: PostgreSQL
 - **Framework**: Node.js + Express
 - **Version**: 1.0.0
@@ -195,12 +195,12 @@ New p4p/
 ## 🔒 Database Configuration
 
 ### ข้อมูลการเชื่อมต่อ
-
-- **Host**: 192.168.50.18
-- **Port**: 5432
-- **Database**: buddhachin
-- **Username**: buddhachin
-- **Password**: Bud@hos20
+จะแสดงตามข้อมูลของโรงพยาบาล
+- **Host**: 
+- **Port**: 
+- **Database**: 
+- **Username**: 
+- **Password**: 
 
 ### ตัวอย่างตาราง (ถ้ายังไม่มี)
 
