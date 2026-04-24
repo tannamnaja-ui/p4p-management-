@@ -200,239 +200,129 @@ router.post('/import-data', async (req, res) => {
 
   try {
     const { income, user_id = 'system', selected_items } = req.body;
-
-    // ใช้ชื่อจาก token ก่อน ถ้าไม่มี (session หมด/server restart) ให้ใช้ user_id จาก body
     const officerName = (officer.officer_name && officer.officer_name !== 'system')
-      ? officer.officer_name
-      : user_id;
+      ? officer.officer_name : user_id;
     const officerId = officer.officer_id;
 
-    if (!income) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required field: income'
-      });
-    }
-
-    // บังคับให้ต้องส่ง selected_items มาเสมอ
-    if (!selected_items || !Array.isArray(selected_items) || selected_items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'กรุณาเลือกรายการที่ต้องการ Import อย่างน้อย 1 รายการ'
-      });
-    }
+    if (!income)
+      return res.status(400).json({ success: false, error: 'Missing required field: income' });
+    if (!selected_items || !Array.isArray(selected_items) || selected_items.length === 0)
+      return res.status(400).json({ success: false, error: 'กรุณาเลือกรายการที่ต้องการ Import อย่างน้อย 1 รายการ' });
 
     await client.query('BEGIN');
 
-    // ดึง income_name จากตาราง income
-    const incomeResult = await client.query(`
-      SELECT name FROM income WHERE income = $1
-    `, [income]);
+    // 1. income_name (1 query)
+    const incomeResult = await client.query(`SELECT name FROM income WHERE income = $1`, [income]);
     const income_name = incomeResult.rows[0]?.name || '';
+    const items = selected_items.map(item => ({ ...item, income_name }));
+    const icodes = items.map(i => i.icode);
+    console.log(`⏳ Importing ${items.length} items for income ${income}`);
 
-    // ใช้เฉพาะรายการที่ถูกเลือกและส่งมาจาก frontend
-    const items = selected_items.map(item => ({
-      ...item,
-      income_name: income_name
-    }));
-
-    console.log(`✅ Importing ${items.length} selected items for income ${income}`);
-
-    // 2. ตรวจสอบว่ามีตาราง p4p_doctor_point และ tmp_p4p_point หรือไม่
-    const checkTableP4P = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 'p4p_doctor_point'
-      );
+    // 2. สร้างตารางและ index ถ้ายังไม่มี
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS p4p_doctor_point (
+        p4p_items_point_id INTEGER, icode VARCHAR(7), p4p_items_type_id INTEGER,
+        point NUMERIC, istatus CHAR(1), income CHAR(2),
+        begin_date DATE, finish_date DATE, update_datetime TIMESTAMP
+      )
     `);
-
-    const checkTableTmp = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 'tmp_p4p_point'
-      );
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_p4p_dp_icode ON p4p_doctor_point(icode)`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tmp_p4p_point (
+        income_name VARCHAR(200), icode VARCHAR(7), meaning VARCHAR(200),
+        price NUMERIC, point_old NUMERIC(15,3), point_new NUMERIC(15,3), icd9cm VARCHAR(10)
+      )
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tmp_p4p_icode ON tmp_p4p_point(icode)`);
 
-    // 2.5 ตรวจสอบโครงสร้างตาราง p4p_doctor_point ที่มีอยู่
-    let p4pColumns = {};
-    let tmpColumns = {};
+    // ── p4p_doctor_point ──────────────────────────────────────────────────────
 
-    if (checkTableP4P.rows[0].exists) {
-      const columnsResult = await client.query(`
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-        AND table_name = 'p4p_doctor_point'
-      `);
-      columnsResult.rows.forEach(row => {
-        p4pColumns[row.column_name] = true;
-      });
-      console.log('📋 p4p_doctor_point columns:', Object.keys(p4pColumns));
-    }
+    // 3. ดึง icode+point ที่มีอยู่แล้วใน 1 query
+    const existP4P = await client.query(
+      `SELECT icode, point FROM p4p_doctor_point WHERE icode = ANY($1)`, [icodes]
+    );
+    const existMap = new Map(existP4P.rows.map(r => [r.icode, r.point]));
 
-    if (checkTableTmp.rows[0].exists) {
-      const columnsResult = await client.query(`
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-        AND table_name = 'tmp_p4p_point'
-      `);
-      columnsResult.rows.forEach(row => {
-        tmpColumns[row.column_name] = true;
-      });
-      console.log('📋 tmp_p4p_point columns:', Object.keys(tmpColumns));
-    }
+    const toInsert = items.filter(i => !existMap.has(i.icode));
+    const toUpdate = items.filter(i =>  existMap.has(i.icode));
 
-    // 3. สร้างตารางถ้ายังไม่มี
-    if (!checkTableP4P.rows[0].exists) {
+    // 4. batch INSERT (1 query)
+    if (toInsert.length > 0) {
       await client.query(`
-        CREATE TABLE p4p_doctor_point (
-          id SERIAL PRIMARY KEY,
-          icode VARCHAR(50),
-          item_name VARCHAR(255),
-          income VARCHAR(50),
-          unitprice DECIMAL(10,2),
-          point DECIMAL(10,2),
-          description TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          created_by VARCHAR(50),
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(icode)
-        );
-      `);
-      console.log('✅ Created table: p4p_doctor_point');
+        INSERT INTO p4p_doctor_point (p4p_items_point_id, icode, point, istatus, income, update_datetime)
+        SELECT (SELECT COALESCE(MAX(p4p_items_point_id), 0) FROM p4p_doctor_point) + ROW_NUMBER() OVER (),
+               icode, 0, istatus, income, NOW()
+        FROM UNNEST($1::text[], $2::text[], $3::text[]) AS t(icode, istatus, income)
+      `, [toInsert.map(i => i.icode), toInsert.map(i => i.istatus || 'Y'), toInsert.map(i => i.income)]);
     }
 
-    if (!checkTableTmp.rows[0].exists) {
+    // 5. batch UPDATE (1 query)
+    if (toUpdate.length > 0) {
       await client.query(`
-        CREATE TABLE tmp_p4p_point (
-          id SERIAL PRIMARY KEY,
-          icode VARCHAR(50),
-          item_name VARCHAR(255),
-          income VARCHAR(50),
-          unitprice DECIMAL(10,2),
-          point DECIMAL(10,2),
-          description TEXT,
-          import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          imported_by VARCHAR(50)
-        );
-      `);
-      console.log('✅ Created table: tmp_p4p_point');
+        UPDATE p4p_doctor_point AS p
+        SET point = 0, istatus = v.istatus, income = v.income, update_datetime = NOW()
+        FROM (SELECT UNNEST($1::text[]) AS icode,
+                     UNNEST($2::text[]) AS istatus,
+                     UNNEST($3::text[]) AS income) AS v
+        WHERE p.icode = v.icode
+      `, [toUpdate.map(i => i.icode), toUpdate.map(i => i.istatus || 'Y'), toUpdate.map(i => i.income)]);
     }
 
-    // 4. Insert ข้อมูลเข้า p4p_doctor_point
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-    const p4pLogItems = []; // เก็บ log สำหรับ batch insert
-
-    // หา p4p_items_point_id ที่มากที่สุด
-    const maxIdResult = await client.query(`
-      SELECT COALESCE(MAX(p4p_items_point_id), 0) as max_id FROM p4p_doctor_point
-    `);
-    let currentId = maxIdResult.rows[0].max_id;
-
-    for (const item of items) {
-      try {
-        currentId++;
-
-        // ตรวจสอบว่ามี icode นี้อยู่แล้วหรือไม่
-        const checkExists = await client.query(`
-          SELECT p4p_items_point_id, point FROM p4p_doctor_point WHERE icode = $1
-        `, [item.icode]);
-
-        if (checkExists.rowCount > 0) {
-          const oldPoint = checkExists.rows[0].point;
-          await client.query(`
-            UPDATE p4p_doctor_point
-            SET point = $1, istatus = $2, income = $3, update_datetime = NOW()
-            WHERE icode = $4
-          `, [0, item.istatus, item.income, item.icode]);
-          updatedCount++;
-          p4pLogItems.push({ icode: item.icode, point_old: oldPoint, point_new: 0 });
-        } else {
-          await client.query(`
-            INSERT INTO p4p_doctor_point (
-              p4p_items_point_id, icode, point, istatus, income, update_datetime
-            ) VALUES ($1, $2, $3, $4, $5, NOW())
-          `, [currentId, item.icode, 0, item.istatus, item.income]);
-          insertedCount++;
-          p4pLogItems.push({ icode: item.icode, point_old: null, point_new: 0 });
-        }
-
-      } catch (err) {
-        console.error(`Error inserting icode ${item.icode}:`, err.message);
-        skippedCount++;
-      }
-    }
-
-    // 4.5 บันทึก Log ลง p4p_point_log (batch insert)
+    // 6. batch log (1 query)
+    const logItems = [
+      ...toInsert.map(i => ({ icode: i.icode, point_old: null,                  point_new: 0 })),
+      ...toUpdate.map(i => ({ icode: i.icode, point_old: existMap.get(i.icode), point_new: 0 })),
+    ];
     await ensureP4PLogTable(client);
-    await batchLogP4P(client, p4pLogItems, officerId, officerName);
-    console.log(`📝 Logged ${p4pLogItems.length} entries to p4p_point_log`);
+    await batchLogP4P(client, logItems, officerId, officerName);
 
-    // 5. Insert ข้อมูลเข้า tmp_p4p_point (เช็คซ้ำก่อน)
-    let tmpInsertedCount = 0;
-    let tmpUpdatedCount = 0;
+    // ── tmp_p4p_point ─────────────────────────────────────────────────────────
 
-    for (const item of items) {
-      try {
-        // หาค่าราคาจากคอลัมน์ที่มีจริง
-        const price = item.unitprice || item.price || item.unit_price || 0;
+    // 7. ดึง icode ที่มีอยู่ใน 1 query
+    const existTmp = await client.query(
+      `SELECT icode FROM tmp_p4p_point WHERE icode = ANY($1)`, [icodes]
+    );
+    const existTmpSet = new Set(existTmp.rows.map(r => r.icode));
 
-        // ตรวจสอบว่ามี icode นี้อยู่แล้วหรือไม่
-        const checkTmpExists = await client.query(`
-          SELECT icode FROM tmp_p4p_point WHERE icode = $1
-        `, [item.icode]);
+    const tmpInsert = items.filter(i => !existTmpSet.has(i.icode));
+    const tmpUpdate = items.filter(i =>  existTmpSet.has(i.icode));
+    const prices    = items.reduce((m, i) => { m.set(i.icode, parseFloat(i.unitprice || i.price || i.unit_price || 0)); return m; }, new Map());
 
-        if (checkTmpExists.rowCount > 0) {
-          // UPDATE ถ้ามีอยู่แล้ว
-          await client.query(`
-            UPDATE tmp_p4p_point
-            SET income_name = $1, meaning = $2, price = $3
-            WHERE icode = $4
-          `, [item.income_name, item.name, price, item.icode]);
-          tmpUpdatedCount++;
-        } else {
-          // INSERT ถ้ายังไม่มี
-          await client.query(`
-            INSERT INTO tmp_p4p_point (
-              income_name, icode, meaning, price
-            ) VALUES ($1, $2, $3, $4)
-          `, [
-            item.income_name,  // จาก income.name (ได้จาก JOIN แล้ว)
-            item.icode,        // จาก nondrugitems.icode
-            item.name,         // จาก nondrugitems.name (ใช้เป็น meaning)
-            price              // จาก nondrugitems.unitprice
-          ]);
-          tmpInsertedCount++;
-        }
-
-      } catch (err) {
-        console.error(`Error inserting to tmp_p4p_point icode ${item.icode}:`, err.message);
-      }
+    // 8. batch INSERT tmp (1 query)
+    if (tmpInsert.length > 0) {
+      await client.query(`
+        INSERT INTO tmp_p4p_point (income_name, icode, meaning, price)
+        SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[], $4::numeric[])
+          AS t(income_name, icode, meaning, price)
+      `, [tmpInsert.map(i => i.income_name), tmpInsert.map(i => i.icode),
+          tmpInsert.map(i => i.name || ''), tmpInsert.map(i => prices.get(i.icode))]);
     }
 
-    // 6. Commit Transaction
+    // 9. batch UPDATE tmp (1 query)
+    if (tmpUpdate.length > 0) {
+      await client.query(`
+        UPDATE tmp_p4p_point AS t
+        SET income_name = v.income_name, meaning = v.meaning, price = v.price
+        FROM (SELECT UNNEST($1::text[]) AS icode,
+                     UNNEST($2::text[]) AS income_name,
+                     UNNEST($3::text[]) AS meaning,
+                     UNNEST($4::numeric[]) AS price) AS v
+        WHERE t.icode = v.icode
+      `, [tmpUpdate.map(i => i.icode), tmpUpdate.map(i => i.income_name),
+          tmpUpdate.map(i => i.name || ''), tmpUpdate.map(i => prices.get(i.icode))]);
+    }
+
     await client.query('COMMIT');
+    console.log(`✅ Imported ${items.length} items (insert:${toInsert.length} update:${toUpdate.length})`);
 
     res.status(201).json({
       success: true,
       message: 'Data imported successfully',
       summary: {
-        income: income,
+        income,
         total_items: items.length,
-        p4p_doctor_point: {
-          inserted: insertedCount,
-          updated: updatedCount,
-          skipped: skippedCount
-        },
-        tmp_p4p_point: {
-          inserted: tmpInsertedCount,
-          updated: tmpUpdatedCount
-        }
+        p4p_doctor_point: { inserted: toInsert.length, updated: toUpdate.length, skipped: 0 },
+        tmp_p4p_point:    { inserted: tmpInsert.length, updated: tmpUpdate.length }
       },
       timestamp: new Date().toISOString()
     });
@@ -440,11 +330,7 @@ router.post('/import-data', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error importing data:', err);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to import data',
-      message: err.message
-    });
+    res.status(500).json({ success: false, error: 'Failed to import data', message: err.message });
   } finally {
     client.release();
   }
@@ -896,6 +782,20 @@ router.delete('/tmp-p4p-point/clear', async (req, res) => {
 });
 
 // =====================================
+// GET: ดึงรายชื่อแพทย์ทั้งหมดที่เปิดใช้งาน (status='Y')
+// =====================================
+router.get('/active-doctors', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT code, name FROM doctor WHERE active = 'Y' ORDER BY name`
+    );
+    res.json({ success: true, count: result.rowCount, data: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// =====================================
 // GET: ดึงรายชื่อแพทย์ที่มีรายการใน opitemrece + p4p_doctor_point
 // =====================================
 router.get('/doctors', async (req, res) => {
@@ -1168,8 +1068,19 @@ router.put('/doctor-positions/dept/:dept_code', async (req, res) => {
   const { dept_code } = req.params;
   const { position_ids } = req.body; // array of id
   try {
-    // ล้าง dept_code ออกจาก hos_guid ของทุก row ก่อน
-    const existingRows = await pool.query(`SELECT id, TRIM(hos_guid) AS hos_guid FROM doctor_position`);
+    // 1. หา positions ที่เคยมี dept_code นี้ (ก่อนบันทึก) — เพื่อ sync doctors ที่ถูกเอาออก
+    const oldResult = await pool.query(
+      `SELECT id FROM doctor_position
+       WHERE TRIM(hos_guid::text) = $1
+          OR TRIM(hos_guid::text) LIKE $1 || ',%'
+          OR TRIM(hos_guid::text) LIKE '%,' || $1
+          OR TRIM(hos_guid::text) LIKE '%,' || $1 || ',%'`,
+      [String(dept_code)]
+    );
+    const oldPositionIds = oldResult.rows.map(r => r.id);
+
+    // 2. ล้าง dept_code ออกจาก hos_guid ของทุก row ก่อน
+    const existingRows = await pool.query(`SELECT id, TRIM(hos_guid::text) AS hos_guid FROM doctor_position`);
     for (const row of existingRows.rows) {
       const current = (row.hos_guid || '').split(',').map(s => s.trim()).filter(Boolean);
       const removed = current.filter(v => v !== String(dept_code));
@@ -1178,17 +1089,57 @@ router.put('/doctor-positions/dept/:dept_code', async (req, res) => {
         await pool.query(`UPDATE doctor_position SET hos_guid = $1 WHERE id = $2`, [newVal, row.id]);
       }
     }
-    // เพิ่ม dept_code เข้า rows ที่เลือก
-    if (Array.isArray(position_ids)) {
-      for (const pid of position_ids) {
-        const r = await pool.query(`SELECT TRIM(hos_guid) AS hos_guid FROM doctor_position WHERE id = $1`, [pid]);
-        if (r.rows.length === 0) continue;
-        const current = (r.rows[0].hos_guid || '').split(',').map(s => s.trim()).filter(Boolean);
-        if (!current.includes(String(dept_code))) current.push(String(dept_code));
-        await pool.query(`UPDATE doctor_position SET hos_guid = $1 WHERE id = $2`, [current.join(','), pid]);
-      }
+
+    // 3. เพิ่ม dept_code เข้า rows ที่เลือก
+    const newPositionIds = Array.isArray(position_ids) ? position_ids.map(p => parseInt(p)) : [];
+    for (const pid of newPositionIds) {
+      const r = await pool.query(`SELECT TRIM(hos_guid::text) AS hos_guid FROM doctor_position WHERE id = $1`, [pid]);
+      if (r.rows.length === 0) continue;
+      const current = (r.rows[0].hos_guid || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!current.includes(String(dept_code))) current.push(String(dept_code));
+      await pool.query(`UPDATE doctor_position SET hos_guid = $1 WHERE id = $2`, [current.join(','), pid]);
     }
-    res.json({ success: true });
+
+    // 4. หา positions ที่ได้รับผลกระทบ (เดิม + ใหม่)
+    const affectedIds = [...new Set([...oldPositionIds, ...newPositionIds])];
+    if (affectedIds.length === 0) {
+      return res.json({ success: true, synced: 0 });
+    }
+
+    // 5. ตรวจสอบว่ามี doctor ที่ position_id ตรงกับ affectedIds หรือไม่
+    const matchCheck = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM doctor WHERE position_id = ANY($1)`,
+      [affectedIds]
+    );
+    const matched = parseInt(matchCheck.rows[0].cnt);
+    console.log(`📋 positions affected: [${affectedIds.join(',')}] → doctors matched: ${matched}`);
+
+    if (matched === 0) {
+      console.warn(`⚠️  ไม่มี doctor ที่ position_id ตรงกับ positions ที่บันทึก`);
+      return res.json({ success: true, synced: 0, warning: 'ไม่มี doctor ที่ position_id ตรงกัน' });
+    }
+
+    // 6. Sync doctor.hos_guid เฉพาะ doctors ที่ position_id ตรงกับ affectedIds
+    const syncResult = await pool.query(`
+      UPDATE doctor d
+      SET hos_guid = sub.dept_codes
+      FROM (
+        SELECT dp.id AS pos_id,
+          NULLIF(
+            (SELECT string_agg(TRIM(v), ',' ORDER BY TRIM(v)::integer)
+             FROM unnest(string_to_array(COALESCE(TRIM(dp.hos_guid::text), ''), ',')) AS t(v)
+             WHERE TRIM(v) ~ '^[1-8]$'
+            ), ''
+          ) AS dept_codes
+        FROM doctor_position dp
+        WHERE dp.id = ANY($1)
+      ) sub
+      WHERE d.position_id = sub.pos_id
+    `, [affectedIds]);
+
+    console.log(`✅ Synced doctor.hos_guid: ${syncResult.rowCount} rows (positions: [${affectedIds.join(',')}])`);
+    res.json({ success: true, synced: syncResult.rowCount });
+
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

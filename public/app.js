@@ -32,7 +32,8 @@ function hideAlert() {
 }
 
 function showLoading(show = true) {
-    document.getElementById('loadingSpinner').style.display = show ? 'block' : 'none';
+    const el = document.getElementById('loadingSpinner');
+    if (el) el.style.display = show ? 'block' : 'none';
 }
 
 function setButtonLoading(buttonId, loading = true, text = '') {
@@ -339,6 +340,9 @@ async function loadPreviewData(income) {
                         <button onclick="selectAllItems(false)" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs">
                             <i class="fas fa-times mr-1"></i>ยกเลิกทั้งหมด
                         </button>
+                        <button onclick="selectNotImported()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs">
+                            <i class="fas fa-filter mr-1"></i>เลือกเฉพาะที่ยังไม่ได้นำเข้า
+                        </button>
                     </div>
                 </div>
                 <table class="min-w-full divide-y divide-gray-200">
@@ -457,11 +461,8 @@ document.getElementById('importBtn').addEventListener('click', async () => {
             // แจ้งเตือนสรุปผล
             showAlert(`✅ นำเข้าทั้งหมดแล้ว ${totalImported} รายการ (เพิ่มใหม่ ${inserted} | อัปเดต ${updated})`, 'success');
 
-            // refresh income dropdown และ preview
-            await loadIncomeList();
-            if (selectedIncome) {
-                await loadPreviewData(selectedIncome);
-            }
+            // refresh income dropdown เท่านั้น (ไม่ reload preview — ให้ผู้ใช้กดรีเฟรชเอง)
+            loadIncomeList();
         } else {
             showAlert(`เกิดข้อผิดพลาด: ${result.error}`, 'error');
         }
@@ -644,6 +645,17 @@ function selectAllItems(checked) {
     document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = checked);
     const all = document.getElementById('selectAllCheckbox');
     if (all) all.checked = checked;
+}
+
+function selectNotImported() {
+    document.querySelectorAll('.item-checkbox').forEach(cb => {
+        try {
+            const item = JSON.parse(cb.dataset.item);
+            cb.checked = !item.already_imported;
+        } catch { cb.checked = false; }
+    });
+    const all = document.getElementById('selectAllCheckbox');
+    if (all) all.checked = false;
 }
 
 // =====================================

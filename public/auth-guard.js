@@ -39,6 +39,7 @@ async function requireAuth() {
             return null;
         }
 
+        if (data.db) sessionStorage.setItem('p4p_session_db', JSON.stringify(data.db));
         return data.officer;
     } catch {
         // Server error — ยังไม่ redirect ให้ใช้งานต่อได้

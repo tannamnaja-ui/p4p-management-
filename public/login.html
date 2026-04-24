@@ -12,15 +12,11 @@
         .bg-hospital {
             background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #1d4ed8 100%);
         }
-        .login-card {
-            animation: slideUp 0.4s ease-out;
-        }
+        .login-card { animation: slideUp 0.4s ease-out; }
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(20px); }
             to   { opacity: 1; transform: translateY(0); }
         }
-        #dbModal { display: none; }
-        #dbModal.show { display: flex; }
     </style>
 </head>
 <body class="bg-hospital min-h-screen flex flex-col items-center justify-center px-4">
@@ -38,158 +34,45 @@
     <!-- Login Card -->
     <div class="login-card bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
 
-        <h2 class="text-xl font-bold text-gray-800 mb-1 text-center">เข้าสู่ระบบ</h2>
-        <p class="text-gray-400 text-sm text-center mb-6">กรุณาใส่รหัสผู้ใช้งาน</p>
-
-        <!-- Alert -->
-        <div id="alert" class="hidden mb-4"></div>
-
-        <!-- DB Status -->
-        <div id="dbStatusBar" class="mb-4 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
-            <div class="flex items-center space-x-2 text-sm">
-                <span id="dbStatusDot" class="w-2 h-2 rounded-full bg-red-400"></span>
-                <span id="dbStatusText" class="text-gray-500">ตรวจสอบการเชื่อมต่อ...</span>
-            </div>
-            <button onclick="openDbModal()" class="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                <i class="fas fa-cog mr-1"></i>ตั้งค่า DB
-            </button>
+        <!-- Auto-login state (แสดงขณะตรวจสอบ code จาก URL) -->
+        <div id="autoLoginState" class="hidden text-center py-6">
+            <i class="fas fa-spinner fa-spin text-blue-500 text-3xl mb-3"></i>
+            <p class="text-gray-700 font-semibold text-lg">กำลังตรวจสอบ BMS Session...</p>
+            <p class="text-gray-400 text-sm mt-1">กรุณารอสักครู่</p>
         </div>
 
-        <!-- Form -->
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="mb-4">
-                <label class="block text-sm font-semibold text-gray-700 mb-1">
-                    <i class="fas fa-user text-blue-500 mr-1"></i>Username
-                </label>
-                <input id="username" type="text" placeholder="กรอก Username"
-                    autocomplete="username"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition">
-            </div>
+        <!-- Manual input state -->
+        <div id="manualState">
+            <h2 class="text-xl font-bold text-gray-800 mb-1 text-center">เข้าสู่ระบบด้วย BMS</h2>
+            <p class="text-gray-400 text-sm text-center mb-6">กรอก Session Code จากระบบ HOSxP</p>
 
-            <div class="mb-6">
-                <label class="block text-sm font-semibold text-gray-700 mb-1">
-                    <i class="fas fa-lock text-blue-500 mr-1"></i>Password
-                </label>
-                <div class="relative">
-                    <input id="password" type="password" placeholder="กรอก Password"
+            <!-- Alert -->
+            <div id="alert" class="hidden mb-4"></div>
+
+            <!-- Form -->
+            <form id="loginForm" onsubmit="handleBmsLogin(event)">
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        <i class="fas fa-key text-blue-500 mr-1"></i>BMS Session Code
+                    </label>
+                    <input id="sessionCode" type="text" placeholder="กรอก Session Code จาก HOSxP"
                         autocomplete="off"
-                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition pr-12">
-                    <button type="button" onclick="togglePw()"
-                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1">
-                        <i id="pwIcon" class="fas fa-eye text-sm"></i>
-                    </button>
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition font-mono">
+                    <p class="text-gray-400 text-xs mt-1.5">
+                        <i class="fas fa-info-circle mr-1"></i>รับ code จากระบบ HOSxP ผ่าน PasteJSON
+                    </p>
                 </div>
-            </div>
 
-            <div class="flex items-center mb-6 -mt-2">
-                <input id="rememberMe" type="checkbox"
-                    class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer">
-                <label for="rememberMe" class="ml-2 text-sm text-gray-600 cursor-pointer select-none">
-                    จำค่า Login
-                </label>
-            </div>
-
-            <button type="submit" id="loginBtn"
-                class="w-full bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold py-3 px-6 rounded-xl transition duration-200 text-sm">
-                <i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ
-            </button>
-        </form>
-
-    </div>
-
-    <p class="text-blue-300 text-xs mt-6">P4P Management System v1.0</p>
-
-    <!-- ===== DB Modal ===== -->
-    <div id="dbModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4" onclick="event.stopPropagation()">
-
-            <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <i class="fas fa-database text-xl"></i>
-                    <div>
-                        <h3 class="text-lg font-bold">ตั้งค่าการเชื่อมต่อฐานข้อมูล</h3>
-                        <p class="text-blue-200 text-xs mt-0.5">กำหนดข้อมูลการเชื่อมต่อ Database</p>
-                    </div>
-                </div>
-                <button onclick="closeDbModal()" class="text-white hover:text-blue-200 text-xl">
-                    <i class="fas fa-times"></i>
+                <button type="submit" id="loginBtn"
+                    class="w-full bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold py-3 px-6 rounded-xl transition duration-200 text-sm">
+                    <i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ
                 </button>
-            </div>
-
-            <div class="p-6 space-y-4">
-                <div id="modalConnStatus" class="hidden text-sm text-center py-2 px-4 rounded-lg font-semibold"></div>
-
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">
-                        <i class="fas fa-server mr-1 text-blue-500"></i>ประเภทฐานข้อมูล
-                    </label>
-                    <select id="dbType" onchange="setDefaultPort()"
-                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
-                        <option value="">-- เลือกประเภท --</option>
-                        <option value="postgresql">PostgreSQL</option>
-                        <option value="mysql">MySQL</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">
-                        <i class="fas fa-network-wired mr-1 text-blue-500"></i>IP / Host
-                    </label>
-                    <input id="dbHost" type="text" placeholder="เช่น 192.168.1.100 หรือ localhost"
-                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">
-                            <i class="fas fa-plug mr-1 text-blue-500"></i>Port
-                        </label>
-                        <input id="dbPort" type="number" placeholder="5432"
-                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">
-                            <i class="fas fa-database mr-1 text-blue-500"></i>Database
-                        </label>
-                        <input id="dbName" type="text" placeholder="ชื่อ database"
-                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">
-                        <i class="fas fa-user mr-1 text-blue-500"></i>Username
-                    </label>
-                    <input id="dbUser" type="text" placeholder="ชื่อผู้ใช้"
-                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">
-                        <i class="fas fa-lock mr-1 text-blue-500"></i>Password
-                    </label>
-                    <div class="relative">
-                        <input id="dbPassword" type="password" placeholder="รหัสผ่าน"
-                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm pr-10">
-                        <button type="button" onclick="toggleDbPw()"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                            <i id="dbPwIcon" class="fas fa-eye text-sm"></i>
-                        </button>
-                    </div>
-                </div>
-                <div id="dbTestResult" class="hidden text-sm p-3 rounded-lg"></div>
-            </div>
-
-            <div class="px-6 pb-6 flex flex-col space-y-2">
-                <div class="flex space-x-2">
-                    <button onclick="testDbConnection()"
-                        class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 px-4 rounded-lg transition text-sm">
-                        <i class="fas fa-vial mr-2"></i>ทดสอบ
-                    </button>
-                    <button onclick="saveDbConnection()"
-                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition text-sm">
-                        <i class="fas fa-save mr-2"></i>บันทึกและเชื่อมต่อ
-                    </button>
-                </div>
-            </div>
+            </form>
         </div>
+
     </div>
+
+    <p class="text-blue-300 text-xs mt-6">P4P Management System v1.0 · BMS HOSxP Session</p>
 
     <script src="login.js"></script>
 </body>

@@ -13,14 +13,16 @@ function getOfficerInfo() {
     return info ? JSON.parse(info) : null;
 }
 
-function setAuth(token, officer) {
+function setAuth(token, officer, dbInfo) {
     sessionStorage.setItem('p4p_token', token);
     sessionStorage.setItem('p4p_officer', JSON.stringify(officer));
+    if (dbInfo) sessionStorage.setItem('p4p_session_db', JSON.stringify(dbInfo));
 }
 
 function clearAuth() {
     sessionStorage.removeItem('p4p_token');
     sessionStorage.removeItem('p4p_officer');
+    sessionStorage.removeItem('p4p_session_db');
 }
 
 // =====================================
@@ -46,246 +48,55 @@ function hideAlert() {
 }
 
 // =====================================
-// Toggle password visibility
+// BMS Login
 // =====================================
 
-function togglePw() {
-    const input = document.getElementById('password');
-    const icon = document.getElementById('pwIcon');
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.className = 'fas fa-eye-slash text-sm';
-    } else {
-        input.type = 'password';
-        icon.className = 'fas fa-eye text-sm';
-    }
-}
-
-function toggleDbPw() {
-    const input = document.getElementById('dbPassword');
-    const icon = document.getElementById('dbPwIcon');
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.className = 'fas fa-eye-slash text-sm';
-    } else {
-        input.type = 'password';
-        icon.className = 'fas fa-eye text-sm';
-    }
-}
-
-// =====================================
-// Login
-// =====================================
-
-// =====================================
-// Remember Me
-// =====================================
-
-function loadRemembered() {
-    const saved = localStorage.getItem('p4p_remember');
-    if (!saved) return;
+async function doBmsLogin(code) {
     try {
-        const { username, password, remember } = JSON.parse(saved);
-        if (remember && username) {
-            // ใช้ setTimeout เพื่อให้ browser render เสร็จก่อนค่อยใส่ค่า
-            setTimeout(() => {
-                document.getElementById('username').value = username;
-                document.getElementById('password').value = password || '';
-                document.getElementById('rememberMe').checked = true;
-                // Focus ที่เหมาะสม
-                if (password) {
-                    document.getElementById('loginBtn').focus();
-                } else {
-                    document.getElementById('password').focus();
-                }
-            }, 50);
-        }
-    } catch {}
-}
-
-function saveRemembered(username, password, remember) {
-    if (remember) {
-        localStorage.setItem('p4p_remember', JSON.stringify({ username, password, remember: true }));
-    } else {
-        localStorage.removeItem('p4p_remember');
+        const response = await fetch(`${API_URL}/auth/bms-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        });
+        return await response.json();
+    } catch {
+        return { success: false, error: 'ไม่สามารถติดต่อ Server ได้' };
     }
 }
 
-async function handleLogin(event) {
+// Auto-login จาก URL ?code=XXXX (HOSxP เปิดมาให้)
+async function tryAutoLogin(code) {
+    document.getElementById('autoLoginState').classList.remove('hidden');
+    document.getElementById('manualState').classList.add('hidden');
+    const result = await doBmsLogin(code);
+    if (result.success) {
+        setAuth(result.token, result.officer, result.db);
+        window.location.href = 'index.html';
+    } else {
+        document.getElementById('autoLoginState').classList.add('hidden');
+        document.getElementById('manualState').classList.remove('hidden');
+        showAlert(result.error || 'Session Code ไม่ถูกต้อง กรุณากรอกใหม่');
+    }
+}
+
+// Manual login จาก form
+async function handleBmsLogin(event) {
     event.preventDefault();
     hideAlert();
-
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
-    const remember = document.getElementById('rememberMe').checked;
-
-    if (!username || !password) {
-        showAlert('กรุณากรอก Username และ Password');
-        return;
-    }
-
+    const code = document.getElementById('sessionCode').value.trim();
+    if (!code) { showAlert('กรุณากรอก Session Code'); return; }
     const btn = document.getElementById('loginBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังตรวจสอบ...';
-
-    try {
-        const response = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            saveRemembered(username, password, remember);
-            setAuth(result.token, result.officer);
-            showAlert(`ยินดีต้อนรับ ${result.officer.name}`, 'success');
-            setTimeout(() => { window.location.href = 'index.html'; }, 800);
-        } else {
-            showAlert(result.error || 'เข้าสู่ระบบไม่สำเร็จ');
-        }
-    } catch (err) {
-        showAlert('ไม่สามารถติดต่อ Server ได้');
-    } finally {
+    const result = await doBmsLogin(code);
+    if (result.success) {
+        setAuth(result.token, result.officer, result.db);
+        showAlert(`ยินดีต้อนรับ ${result.officer.name}`, 'success');
+        setTimeout(() => { window.location.href = 'index.html'; }, 800);
+    } else {
+        showAlert(result.error || 'Session Code ไม่ถูกต้อง');
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ';
-    }
-}
-
-// =====================================
-// DB Status Check
-// =====================================
-
-async function checkDbStatus() {
-    try {
-        const res = await fetch(`${API_URL}/settings/connection`);
-        const data = await res.json();
-        const dot = document.getElementById('dbStatusDot');
-        const text = document.getElementById('dbStatusText');
-
-        if (data.connected) {
-            dot.className = 'w-2 h-2 rounded-full bg-green-400';
-            text.textContent = `${data.db_type === 'postgresql' ? 'PostgreSQL' : 'MySQL'}: ${data.db_host}`;
-            text.className = 'text-green-700 text-sm font-medium';
-        } else {
-            dot.className = 'w-2 h-2 rounded-full bg-red-400';
-            text.textContent = 'ยังไม่ได้เชื่อมต่อฐานข้อมูล';
-            text.className = 'text-red-600 text-sm';
-        }
-    } catch {
-        document.getElementById('dbStatusDot').className = 'w-2 h-2 rounded-full bg-gray-400';
-        document.getElementById('dbStatusText').textContent = 'ไม่สามารถติดต่อ Server ได้';
-    }
-}
-
-// =====================================
-// DB Modal
-// =====================================
-
-async function openDbModal() {
-    document.getElementById('dbModal').classList.add('show');
-    document.getElementById('dbTestResult').classList.add('hidden');
-
-    try {
-        const res = await fetch(`${API_URL}/settings/connection`);
-        const data = await res.json();
-        document.getElementById('dbType').value = data.db_type || '';
-        document.getElementById('dbHost').value = data.db_host || '';
-        document.getElementById('dbPort').value = data.db_port || '';
-        document.getElementById('dbName').value = data.db_name || '';
-        document.getElementById('dbUser').value = data.db_user || '';
-        document.getElementById('dbPassword').value = data.db_password || '';
-
-        const statusEl = document.getElementById('modalConnStatus');
-        if (data.connected) {
-            statusEl.className = 'text-sm text-center py-2 px-4 rounded-lg font-semibold bg-green-100 text-green-700';
-            statusEl.textContent = `✅ เชื่อมต่ออยู่: ${data.db_type === 'postgresql' ? 'PostgreSQL' : 'MySQL'} @ ${data.db_host}`;
-        } else {
-            statusEl.className = 'text-sm text-center py-2 px-4 rounded-lg font-semibold bg-red-100 text-red-700';
-            statusEl.textContent = '❌ ยังไม่ได้เชื่อมต่อ';
-        }
-        statusEl.classList.remove('hidden');
-        setDefaultPort();
-    } catch {}
-}
-
-function closeDbModal() {
-    document.getElementById('dbModal').classList.remove('show');
-}
-
-function setDefaultPort() {
-    const type = document.getElementById('dbType').value;
-    const portField = document.getElementById('dbPort');
-    if (!portField.value) {
-        portField.value = type === 'postgresql' ? '5432' : type === 'mysql' ? '3306' : '';
-    }
-}
-
-function getDbFormData() {
-    return {
-        db_type: document.getElementById('dbType').value,
-        db_host: document.getElementById('dbHost').value.trim(),
-        db_port: document.getElementById('dbPort').value,
-        db_user: document.getElementById('dbUser').value.trim(),
-        db_password: document.getElementById('dbPassword').value,
-        db_name: document.getElementById('dbName').value.trim()
-    };
-}
-
-async function testDbConnection() {
-    const data = getDbFormData();
-    const resultEl = document.getElementById('dbTestResult');
-    resultEl.className = 'text-sm p-3 rounded-lg bg-blue-50 text-blue-700';
-    resultEl.textContent = '⏳ กำลังทดสอบ...';
-    resultEl.classList.remove('hidden');
-
-    try {
-        const res = await fetch(`${API_URL}/settings/test`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        if (result.success) {
-            resultEl.className = 'text-sm p-3 rounded-lg bg-green-50 text-green-700 border border-green-200';
-            resultEl.textContent = `✅ เชื่อมต่อสำเร็จ! Version: ${result.version}`;
-        } else {
-            resultEl.className = 'text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200';
-            resultEl.textContent = `❌ ${result.error}`;
-        }
-    } catch {
-        resultEl.className = 'text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200';
-        resultEl.textContent = '❌ ไม่สามารถติดต่อ Server ได้';
-    }
-}
-
-async function saveDbConnection() {
-    const data = getDbFormData();
-    const resultEl = document.getElementById('dbTestResult');
-    resultEl.className = 'text-sm p-3 rounded-lg bg-blue-50 text-blue-700';
-    resultEl.textContent = '⏳ กำลังเชื่อมต่อ...';
-    resultEl.classList.remove('hidden');
-
-    try {
-        const res = await fetch(`${API_URL}/settings/connect`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        if (result.success) {
-            resultEl.className = 'text-sm p-3 rounded-lg bg-green-50 text-green-700 border border-green-200';
-            resultEl.textContent = '✅ เชื่อมต่อและบันทึกสำเร็จ!';
-            await checkDbStatus();
-            setTimeout(() => closeDbModal(), 1500);
-        } else {
-            resultEl.className = 'text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200';
-            resultEl.textContent = `❌ ${result.error}`;
-        }
-    } catch {
-        resultEl.className = 'text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200';
-        resultEl.textContent = '❌ ไม่สามารถติดต่อ Server ได้';
     }
 }
 
@@ -312,12 +123,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearAuth();
     }
 
-    await checkDbStatus();
-
-    // โหลด username/password ที่จำไว้ (ถ้ามี) — focus จัดการใน loadRemembered
-    loadRemembered();
-    // ถ้าไม่มีข้อมูลจำไว้ให้ focus username
-    if (!localStorage.getItem('p4p_remember')) {
-        document.getElementById('username').focus();
+    const urlParams = new URLSearchParams(window.location.search);
+    const bmsCode = urlParams.get('code');
+    if (bmsCode) {
+        await tryAutoLogin(bmsCode);
+        return;
     }
+
+    document.getElementById('sessionCode').focus();
 });

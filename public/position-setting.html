@@ -51,6 +51,21 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
+    <!-- ปิดใช้งานชั่วคราว — ลบ overlay นี้เมื่อต้องการเปิดใช้งาน -->
+    <div id="disabledOverlay" style="position:fixed;inset:0;z-index:9999;background:#f8faff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+        <div style="background:#fff;border-radius:24px;box-shadow:0 8px 40px rgba(245,87,108,0.15);padding:48px 56px;text-align:center;max-width:420px;border:1px solid #fce7f3;">
+            <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#f093fb,#f5576c);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+                <i class="fas fa-tools" style="color:#fff;font-size:1.75rem;"></i>
+            </div>
+            <h2 style="font-size:1.3rem;font-weight:800;color:#1e293b;margin-bottom:8px;">ปิดใช้งานชั่วคราว</h2>
+            <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:28px;line-height:1.6;">หน้าตั้งค่า Position ยังไม่พร้อมใช้งาน<br>กรุณากลับมาภายหลัง</p>
+            <a href="p4p-import.html" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;font-weight:700;padding:10px 28px;border-radius:12px;text-decoration:none;font-size:0.9rem;">
+                <i class="fas fa-arrow-left"></i>กลับหน้าก่อน
+            </a>
+        </div>
+    </div>
+    <!-- /ปิดใช้งานชั่วคราว -->
+
     <header class="main-header text-white shadow-xl">
         <div class="container mx-auto px-6 py-5 flex items-center justify-between max-w-6xl">
             <div class="flex items-center gap-4">
@@ -164,6 +179,9 @@
                                 เลือกได้หลาย Position · เลือกแล้ว
                                 <span id="count-${dept.code}" class="font-bold text-pink-600">${deptSelected[dept.code].size}</span> รายการ
                             </p>
+                            <div id="summary-${dept.code}" class="flex flex-wrap gap-1 mt-1.5">
+                                ${buildSummaryHTML(dept.code)}
+                            </div>
                         </div>
                         <button onclick="saveDept(${dept.code})" id="save-${dept.code}"
                             class="btn-save px-4 py-2 text-sm flex items-center gap-2">
@@ -203,6 +221,15 @@
             document.getElementById(`poslist-${deptCode}`).innerHTML = renderPosList(deptCode, filtered);
         }
 
+        function buildSummaryHTML(deptCode) {
+            const selected = deptSelected[deptCode];
+            if (!selected || selected.size === 0) return '';
+            return allPositions
+                .filter(p => selected.has(String(p.id)))
+                .map(p => `<span class="inline-flex items-center gap-1 text-xs bg-pink-50 border border-pink-200 text-pink-700 rounded-full px-2 py-0.5">${p.name}</span>`)
+                .join('');
+        }
+
         function togglePos(deptCode, posId, checked, label) {
             if (checked) {
                 deptSelected[deptCode].add(String(posId));
@@ -212,6 +239,7 @@
                 label.classList.remove('checked');
             }
             document.getElementById(`count-${deptCode}`).textContent = deptSelected[deptCode].size;
+            document.getElementById(`summary-${deptCode}`).innerHTML = buildSummaryHTML(deptCode);
         }
 
         async function saveDept(deptCode) {

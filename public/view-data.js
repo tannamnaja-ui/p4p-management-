@@ -148,20 +148,11 @@ function closeDoctorDropdown() {
 }
 
 async function loadDoctors() {
-    const dateFrom = document.getElementById('dateFrom').value;
-    const dateTo   = document.getElementById('dateTo').value;
-    const urlParams = getUrlParams();
-
-    const qs = new URLSearchParams();
-    if (dateFrom && dateTo) { qs.set('date_from', dateFrom); qs.set('date_to', dateTo); }
-    if (urlParams.dept_code) qs.set('dept_code', urlParams.dept_code);
-    let url = `${API_URL}/doctors${qs.toString() ? '?' + qs.toString() : ''}`;
-
     const input = document.getElementById('doctorSearchInput');
     if (input) { input.placeholder = '⏳ กำลังโหลด...'; input.disabled = true; }
 
     try {
-        const res = await fetch(url, { headers: authHeaders() });
+        const res = await fetch(`${API_URL}/active-doctors`, { headers: authHeaders() });
         const result = await res.json();
 
         let doctors = result.success ? result.data : [];
@@ -173,7 +164,6 @@ async function loadDoctors() {
 
         allDoctorsCache = doctors;
 
-        // คงค่าที่เลือกไว้ถ้ายังมีในลิสต์
         if (selectedDoctorCode && !doctors.some(d => d.code === selectedDoctorCode)) {
             selectDoctor('', '');
         }
@@ -451,10 +441,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             incomeSelect.value = urlParams.income;
         }
     }
-
-    // reload doctors เมื่อวันที่เปลี่ยน
-    document.getElementById('dateFrom').addEventListener('change', loadDoctors);
-    document.getElementById('dateTo').addEventListener('change', loadDoctors);
 
     // ปิด dropdown เมื่อคลิกข้างนอก
     document.addEventListener('click', e => {

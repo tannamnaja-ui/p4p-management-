@@ -8,25 +8,16 @@ function updateDbStatus(connected, data) {
     const dot = document.getElementById('dbStatusDot');
     const text = document.getElementById('dbStatusText');
     const warning = document.getElementById('dbWarning');
-    const infoCard = document.getElementById('dbInfoCard');
 
     if (connected) {
         dot.className = 'w-2.5 h-2.5 rounded-full bg-green-400 ml-1';
         const typeLabel = data.db_type === 'postgresql' ? 'PostgreSQL' : 'MySQL';
         text.textContent = `${typeLabel}: ${data.db_host}`;
-        warning.classList.add('hidden');
-
-        // แสดง info card
-        infoCard.classList.remove('hidden');
-        document.getElementById('infoType').textContent = typeLabel;
-        document.getElementById('infoHost').textContent = `${data.db_host}:${data.db_port}`;
-        document.getElementById('infoDb').textContent = data.db_name;
-        document.getElementById('infoUser').textContent = data.db_user;
+        if (warning) warning.classList.add('hidden');
     } else {
         dot.className = 'w-2.5 h-2.5 rounded-full bg-red-400 ml-1';
         text.textContent = 'ตั้งค่าการเชื่อมต่อ';
-        warning.classList.remove('hidden');
-        infoCard.classList.add('hidden');
+        if (warning) warning.classList.remove('hidden');
     }
 }
 
@@ -49,7 +40,6 @@ async function openDbModal() {
     document.getElementById('testResult').classList.add('hidden');
     document.getElementById('createTableResult').classList.add('hidden');
 
-    // reset button เป็นสีส้มก่อน แล้วค่อย check
     const btn = document.getElementById('createTablesBtn');
     if (btn) {
         btn.disabled = true;
@@ -58,22 +48,26 @@ async function openDbModal() {
     }
     checkAndUpdateTableBtn();
 
+    const sessionDb = JSON.parse(sessionStorage.getItem('p4p_session_db') || '{}');
+
+    const statusEl = document.getElementById('modalConnStatus');
     try {
         const res = await fetch(`${SETTINGS_URL}/connection`);
-        const data = await res.json();
+        const saved = await res.json();
 
-        document.getElementById('dbType').value = data.db_type || '';
-        document.getElementById('dbHost').value = data.db_host || '';
-        document.getElementById('dbPort').value = data.db_port || '';
-        document.getElementById('dbName').value = data.db_name || '';
-        document.getElementById('dbUser').value = data.db_user || '';
-        document.getElementById('dbPassword').value = data.db_password || '';
+        // pre-fill: BMS session ก่อน ถ้าไม่มีใช้ค่าที่บันทึกไว้
+        const dbType = sessionDb.db_type || saved.db_type || '';
+        document.getElementById('dbType').value    = dbType;
+        document.getElementById('dbHost').value    = sessionDb.db_host || saved.db_host || '';
+        document.getElementById('dbPort').value    = sessionDb.db_port || saved.db_port || (dbType === 'mysql' ? '3306' : '5432');
+        document.getElementById('dbName').value    = sessionDb.db_name || saved.db_name || '';
+        document.getElementById('dbUser').value    = sessionDb.db_user || saved.db_user || '';
+        document.getElementById('dbPassword').value = '';
 
-        const statusEl = document.getElementById('modalConnStatus');
-        if (data.connected) {
+        const typeLabel = dbType === 'postgresql' ? 'PostgreSQL' : 'MySQL';
+        if (saved.connected) {
             statusEl.className = 'text-sm text-center py-2 px-4 rounded-lg font-semibold bg-green-100 text-green-700';
-            const typeLabel = data.db_type === 'postgresql' ? 'PostgreSQL' : 'MySQL';
-            statusEl.textContent = `✅ เชื่อมต่ออยู่: ${typeLabel} @ ${data.db_host}`;
+            statusEl.textContent = `✅ เชื่อมต่ออยู่: ${typeLabel} @ ${saved.db_host}/${saved.db_name}`;
         } else {
             statusEl.className = 'text-sm text-center py-2 px-4 rounded-lg font-semibold bg-red-100 text-red-700';
             statusEl.textContent = '❌ ยังไม่ได้เชื่อมต่อ';
@@ -86,9 +80,9 @@ function closeDbModal() {
     document.getElementById('dbModal').classList.remove('show');
 }
 
-function togglePassword() {
+function toggleDbPassword() {
     const input = document.getElementById('dbPassword');
-    const icon = document.getElementById('pwEyeIcon');
+    const icon  = document.getElementById('dbPwEyeIcon');
     if (input.type === 'password') {
         input.type = 'text';
         icon.className = 'fas fa-eye-slash text-sm';
@@ -100,20 +94,20 @@ function togglePassword() {
 
 function setDefaultPort() {
     const type = document.getElementById('dbType').value;
-    const portField = document.getElementById('dbPort');
-    if (!portField.value) {
-        portField.value = type === 'postgresql' ? '5432' : type === 'mysql' ? '3306' : '';
+    const port = document.getElementById('dbPort');
+    if (!port.value) {
+        port.value = type === 'postgresql' ? '5432' : type === 'mysql' ? '3306' : '';
     }
 }
 
 function getDbFormData() {
     return {
-        db_type: document.getElementById('dbType').value,
-        db_host: document.getElementById('dbHost').value.trim(),
-        db_port: document.getElementById('dbPort').value,
-        db_user: document.getElementById('dbUser').value.trim(),
-        db_password: document.getElementById('dbPassword').value,
-        db_name: document.getElementById('dbName').value.trim()
+        db_type:     document.getElementById('dbType').value,
+        db_host:     document.getElementById('dbHost').value.trim(),
+        db_port:     document.getElementById('dbPort').value,
+        db_name:     document.getElementById('dbName').value.trim(),
+        db_user:     document.getElementById('dbUser').value.trim(),
+        db_password: document.getElementById('dbPassword').value
     };
 }
 
@@ -123,7 +117,6 @@ async function testDbConnection() {
     resultEl.className = 'text-sm p-3 rounded-lg bg-blue-50 text-blue-700';
     resultEl.textContent = '⏳ กำลังทดสอบการเชื่อมต่อ...';
     resultEl.classList.remove('hidden');
-
     try {
         const res = await fetch(`${SETTINGS_URL}/test`, {
             method: 'POST',
@@ -150,7 +143,6 @@ async function saveDbConnection() {
     resultEl.className = 'text-sm p-3 rounded-lg bg-blue-50 text-blue-700';
     resultEl.textContent = '⏳ กำลังเชื่อมต่อ...';
     resultEl.classList.remove('hidden');
-
     try {
         const res = await fetch(`${SETTINGS_URL}/connect`, {
             method: 'POST',
@@ -166,31 +158,12 @@ async function saveDbConnection() {
             setTimeout(() => closeDbModal(), 1500);
         } else {
             resultEl.className = 'text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200';
-            resultEl.textContent = `❌ เชื่อมต่อไม่ได้: ${result.error}`;
+            resultEl.textContent = `❌ ${result.error}`;
         }
-    } catch {
+    } catch (err) {
         resultEl.className = 'text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200';
-        resultEl.textContent = '❌ ไม่สามารถติดต่อ Server ได้';
+        resultEl.textContent = '❌ ไม่สามารถติดต่อ Server ได้: ' + err.message;
     }
-}
-
-async function clearDbConnection() {
-    if (!confirm('ต้องการล้างการเชื่อมต่อฐานข้อมูลใช่ไหม?')) return;
-    try {
-        await fetch(`${SETTINGS_URL}/disconnect`, { method: 'POST' });
-        document.getElementById('dbType').value = '';
-        document.getElementById('dbHost').value = '';
-        document.getElementById('dbPort').value = '';
-        document.getElementById('dbName').value = '';
-        document.getElementById('dbUser').value = '';
-        document.getElementById('dbPassword').value = '';
-        document.getElementById('testResult').classList.add('hidden');
-
-        const statusEl = document.getElementById('modalConnStatus');
-        statusEl.className = 'text-sm text-center py-2 px-4 rounded-lg font-semibold bg-red-100 text-red-700';
-        statusEl.textContent = '❌ ยังไม่ได้เชื่อมต่อ';
-        updateDbStatus(false, {});
-    } catch {}
 }
 
 // =====================================
