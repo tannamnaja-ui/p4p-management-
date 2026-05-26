@@ -1,0 +1,29 @@
+ให้สร้าง bat file creat table 3 table ดังนี้ 
+1.creat table p4p_doctor_point ที่มีฟิลดังนี้
+p4p_items_point_id  int4 32
+icode varchar 7
+p4p_items_type_id int4 32
+point numeric 32
+istatus char 1
+income char 2
+begin_date date
+finish_date date
+update_datetime datetime
+
+2.create table tmp_p4p_point มีฟิลดังนี้ 
+income_name varchar 200
+icode  varchar 7
+meaning varchar 200
+price numeric 
+point_old numeric 3
+point_new numeric 3
+icd9cm varchar 10
+
+3.create table p4p_point_log มีฟิลดังนี้ 
+p4p_point_log_id int4 32
+icode  varchar 7
+point_old numeric 3
+point_new numeric 3
+update_datetime datetime
+officer_id int4 32
+officer_name varchar 200
