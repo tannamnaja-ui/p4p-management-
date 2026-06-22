@@ -1,4 +1,5 @@
 const API_URL = 'http://localhost:3009/api';
+const DEPT_STORAGE_KEY = 'p4p_department';
 
 // =====================================
 // Auth Utilities (shared)
@@ -29,8 +30,8 @@ function clearAuth() {
 // Alert
 // =====================================
 
-function showAlert(message, type = 'error') {
-    const alertDiv = document.getElementById('alert');
+function showAlert(message, type = 'error', targetId = 'alert') {
+    const alertDiv = document.getElementById(targetId);
     const bgColor = type === 'success'
         ? 'bg-green-100 border-green-500 text-green-800'
         : type === 'info'
@@ -43,60 +44,264 @@ function showAlert(message, type = 'error') {
     alertDiv.classList.remove('hidden');
 }
 
-function hideAlert() {
-    document.getElementById('alert').classList.add('hidden');
+function hideAlert(targetId = 'alert') {
+    document.getElementById(targetId).classList.add('hidden');
 }
 
 // =====================================
-// BMS Login
+// Department dropdown
 // =====================================
 
-async function doBmsLogin(code) {
+async function loadDepartments() {
+    const select = document.getElementById('department');
     try {
-        const response = await fetch(`${API_URL}/auth/bms-login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code })
-        });
-        return await response.json();
-    } catch {
-        return { success: false, error: 'ไม่สามารถติดต่อ Server ได้' };
-    }
+        const res = await fetch(`${API_URL}/settings/departments`);
+        const data = await res.json();
+        if (data.success && data.data.length) {
+            const saved = localStorage.getItem(DEPT_STORAGE_KEY) || '';
+            select.innerHTML = '<option value="">-- เลือกห้องทำงาน --</option>' +
+                data.data.map(d => `<option value="${d.depcode}">${d.depname}</option>`).join('');
+            if (saved) select.value = saved;
+        }
+    } catch {}
 }
 
-// Auto-login จาก URL ?code=XXXX (HOSxP เปิดมาให้)
-async function tryAutoLogin(code) {
-    document.getElementById('autoLoginState').classList.remove('hidden');
-    document.getElementById('manualState').classList.add('hidden');
-    const result = await doBmsLogin(code);
-    if (result.success) {
-        setAuth(result.token, result.officer, result.db);
-        window.location.href = 'index.html';
-    } else {
-        document.getElementById('autoLoginState').classList.add('hidden');
-        document.getElementById('manualState').classList.remove('hidden');
-        showAlert(result.error || 'Session Code ไม่ถูกต้อง กรุณากรอกใหม่');
-    }
+function onDepartmentChange() {
+    const val = document.getElementById('department').value;
+    if (val) localStorage.setItem(DEPT_STORAGE_KEY, val);
 }
 
-// Manual login จาก form
-async function handleBmsLogin(event) {
+// =====================================
+// Login
+// =====================================
+
+async function handleLogin(event) {
     event.preventDefault();
     hideAlert();
-    const code = document.getElementById('sessionCode').value.trim();
-    if (!code) { showAlert('กรุณากรอก Session Code'); return; }
+
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const deptSelect = document.getElementById('department');
+    const department = deptSelect.value;
+    const department_name = deptSelect.selectedOptions[0]?.text || '';
+
+    if (!username || !password) {
+        showAlert('กรุณากรอก Username และ Password');
+        return;
+    }
+
     const btn = document.getElementById('loginBtn');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังตรวจสอบ...';
-    const result = await doBmsLogin(code);
-    if (result.success) {
-        setAuth(result.token, result.officer, result.db);
-        showAlert(`ยินดีต้อนรับ ${result.officer.name}`, 'success');
-        setTimeout(() => { window.location.href = 'index.html'; }, 800);
-    } else {
-        showAlert(result.error || 'Session Code ไม่ถูกต้อง');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังเข้าสู่ระบบ...';
+
+    try {
+        const res = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, department, department_name })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            setAuth(result.token, result.officer, result.db);
+            showAlert(`ยินดีต้อนรับ ${result.officer.name}`, 'success');
+            setTimeout(() => { window.location.href = 'index.html'; }, 600);
+        } else {
+            showAlert(result.error || 'Username หรือ Password ไม่ถูกต้อง');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ';
+        }
+    } catch {
+        showAlert('ไม่สามารถติดต่อ Server ได้');
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ';
+    }
+}
+
+// =====================================
+// Connection Settings panel
+// =====================================
+
+function openSettings() {
+    hideAlert();
+    document.getElementById('loginView').classList.add('hidden');
+    document.getElementById('settingsView').classList.remove('hidden');
+    loadConnectionSettings();
+    checkTablesStatus();
+}
+
+function closeSettings() {
+    hideAlert('settingsAlert');
+    document.getElementById('settingsView').classList.add('hidden');
+    document.getElementById('loginView').classList.remove('hidden');
+}
+
+async function loadConnectionSettings() {
+    try {
+        const res = await fetch(`${API_URL}/settings/connection`);
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('dbType').value = data.db_type || 'postgresql';
+            document.getElementById('dbHost').value = data.db_host || '';
+            document.getElementById('dbPort').value = data.db_port || '';
+            document.getElementById('dbName').value = data.db_name || '';
+            document.getElementById('dbUser').value = data.db_user || '';
+            document.getElementById('dbPassword').value = data.db_password || '';
+        }
+    } catch {}
+}
+
+function onDbTypeChange() {
+    const type = document.getElementById('dbType').value;
+    const portInput = document.getElementById('dbPort');
+    if (!portInput.value || portInput.value === '5432' || portInput.value === '3306') {
+        portInput.value = type === 'mysql' ? '3306' : '5432';
+    }
+}
+
+function getConnForm() {
+    return {
+        db_type: document.getElementById('dbType').value,
+        db_host: document.getElementById('dbHost').value.trim(),
+        db_port: document.getElementById('dbPort').value.trim(),
+        db_name: document.getElementById('dbName').value.trim(),
+        db_user: document.getElementById('dbUser').value.trim(),
+        db_password: document.getElementById('dbPassword').value
+    };
+}
+
+async function testConnection() {
+    hideAlert('settingsAlert');
+    const form = getConnForm();
+    if (!form.db_host || !form.db_user || !form.db_name) {
+        showAlert('กรุณากรอกข้อมูลให้ครบ', 'error', 'settingsAlert');
+        return;
+    }
+
+    const btn = document.getElementById('testBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังทดสอบ...';
+
+    try {
+        const res = await fetch(`${API_URL}/settings/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(form)
+        });
+        const result = await res.json();
+        if (result.success) {
+            showAlert('เชื่อมต่อสำเร็จ', 'success', 'settingsAlert');
+        } else {
+            showAlert(result.error || 'เชื่อมต่อไม่สำเร็จ', 'error', 'settingsAlert');
+        }
+    } catch {
+        showAlert('ไม่สามารถติดต่อ Server ได้', 'error', 'settingsAlert');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plug mr-2"></i>ทดสอบการเชื่อมต่อ';
+    }
+}
+
+async function saveConnection() {
+    hideAlert('settingsAlert');
+    const form = getConnForm();
+    if (!form.db_host || !form.db_user || !form.db_name) {
+        showAlert('กรุณากรอกข้อมูลให้ครบ', 'error', 'settingsAlert');
+        return;
+    }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังบันทึก...';
+
+    try {
+        const res = await fetch(`${API_URL}/settings/connect`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(form)
+        });
+        const result = await res.json();
+        if (result.success) {
+            closeSettings();
+            showAlert('บันทึกการเชื่อมต่อสำเร็จ', 'success');
+            loadDepartments();
+        } else {
+            showAlert(result.error || 'บันทึกไม่สำเร็จ', 'error', 'settingsAlert');
+        }
+    } catch {
+        showAlert('ไม่สามารถติดต่อ Server ได้', 'error', 'settingsAlert');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save mr-2"></i>บันทึกข้อมูลเชื่อมต่อ';
+        checkTablesStatus();
+    }
+}
+
+// =====================================
+// ตรวจสอบ/สร้างตาราง P4P
+// =====================================
+
+function setCreateTablesBtnState(enabled, label) {
+    const btn = document.getElementById('createTablesBtn');
+    btn.disabled = !enabled;
+    btn.innerHTML = `<i class="fas fa-table mr-2"></i>${label}`;
+    btn.className = enabled
+        ? 'w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-xl transition text-sm mb-3'
+        : 'w-full bg-gray-300 text-gray-500 font-semibold py-3 px-4 rounded-xl transition text-sm mb-3 cursor-not-allowed';
+}
+
+function renderTablesStatus(tables) {
+    const container = document.getElementById('tablesStatus');
+    if (!tables || !tables.length) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = tables.map(t => {
+        const icon = t.complete
+            ? '<i class="fas fa-check-circle text-green-500"></i>'
+            : '<i class="fas fa-times-circle text-red-400"></i>';
+        return `<div class="flex items-center gap-2"><span class="w-4 text-center">${icon}</span><span class="font-mono">${t.name}</span></div>`;
+    }).join('');
+}
+
+async function checkTablesStatus() {
+    try {
+        const res = await fetch(`${API_URL}/settings/check-tables`);
+        const data = await res.json();
+        renderTablesStatus(data.tables);
+        if (data.complete) {
+            setCreateTablesBtnState(false, 'มีตารางครบแล้ว');
+        } else if (data.reason === 'not_connected') {
+            setCreateTablesBtnState(false, 'กรุณาเชื่อมต่อฐานข้อมูลก่อน');
+        } else {
+            setCreateTablesBtnState(true, 'เพิ่มตาราง');
+        }
+    } catch {
+        setCreateTablesBtnState(false, 'เพิ่มตาราง');
+    }
+}
+
+async function createTables() {
+    const btn = document.getElementById('createTablesBtn');
+    if (btn.disabled) return;
+
+    hideAlert('settingsAlert');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>กำลังสร้างตาราง...';
+
+    try {
+        const res = await fetch(`${API_URL}/settings/create-tables`, { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            const names = (result.logs || []).map(l => l.name).join(', ');
+            showAlert(`สร้างตารางสำเร็จ: ${names}`, 'success', 'settingsAlert');
+        } else {
+            showAlert(result.error || 'สร้างตารางไม่สำเร็จ', 'error', 'settingsAlert');
+        }
+    } catch {
+        showAlert('ไม่สามารถติดต่อ Server ได้', 'error', 'settingsAlert');
+    } finally {
+        checkTablesStatus();
     }
 }
 
@@ -123,12 +328,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearAuth();
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const bmsCode = urlParams.get('code');
-    if (bmsCode) {
-        await tryAutoLogin(bmsCode);
-        return;
-    }
-
-    document.getElementById('sessionCode').focus();
+    loadDepartments();
+    document.getElementById('username').focus();
 });

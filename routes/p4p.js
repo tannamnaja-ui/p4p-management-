@@ -354,18 +354,21 @@ router.get('/income-filter-list', async (req, res) => {
     if (hasPdpTable) {
       result = await pool.query(`
         SELECT i.income, i.name as income_name,
-               COUNT(p.icode) as imported_count
+               COUNT(DISTINCT p.icode) as imported_count,
+               COUNT(DISTINCT n.icode) as total_count
         FROM income i
-        LEFT JOIN p4p_doctor_point p ON i.income = p.income
+        LEFT JOIN nondrugitems n ON i.income = n.income AND n.istatus = 'Y'
+        LEFT JOIN p4p_doctor_point p ON n.icode = p.icode
         WHERE i.income IS NOT NULL AND i.name IS NOT NULL
         GROUP BY i.income, i.name
+        HAVING COUNT(DISTINCT p.icode) > 0
         ORDER BY i.name
       `);
     } else {
       result = await pool.query(`
-        SELECT income, name as income_name, 0 as imported_count
+        SELECT income, name as income_name, 0 as imported_count, 0 as total_count
         FROM income
-        WHERE income IS NOT NULL AND name IS NOT NULL
+        WHERE income IS NOT NULL AND name IS NOT NULL AND false
         ORDER BY name
       `);
     }
@@ -787,7 +790,7 @@ router.delete('/tmp-p4p-point/clear', async (req, res) => {
 router.get('/active-doctors', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT code, name FROM doctor WHERE active = 'Y' ORDER BY name`
+      `SELECT code, name, position_id FROM doctor WHERE active = 'Y' ORDER BY name`
     );
     res.json({ success: true, count: result.rowCount, data: result.rows });
   } catch (err) {
@@ -843,7 +846,7 @@ router.get('/doctors', async (req, res) => {
 // =====================================
 router.get('/report', async (req, res) => {
   try {
-    const { date_from, date_to, doctor, income } = req.query;
+    const { date_from, date_to, doctor, income, position_ids } = req.query;
 
     if (!date_from || !date_to) {
       return res.status(400).json({ success: false, error: 'กรุณาระบุวันที่เริ่มต้นและสิ้นสุด' });
@@ -852,6 +855,7 @@ router.get('/report', async (req, res) => {
     const params = [date_from, date_to];
     let doctorFilter = '';
     let incomeFilter = '';
+    let positionFilter = '';
 
     if (doctor) {
       params.push(doctor);
@@ -860,6 +864,13 @@ router.get('/report', async (req, res) => {
     if (income) {
       params.push(income);
       incomeFilter = `AND p.income = $${params.length}`;
+    }
+    if (position_ids) {
+      const ids = String(position_ids).split(',').map(v => parseInt(v)).filter(v => !isNaN(v));
+      if (ids.length > 0) {
+        params.push(ids);
+        positionFilter = `AND d.position_id = ANY($${params.length}::int[])`;
+      }
     }
 
     const result = await pool.query(`
@@ -881,6 +892,7 @@ router.get('/report', async (req, res) => {
       WHERE o.vstdate BETWEEN $1 AND $2
         ${doctorFilter}
         ${incomeFilter}
+        ${positionFilter}
       ORDER BY o.vstdate, o.hn, o.icode
     `, params);
 

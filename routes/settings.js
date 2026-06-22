@@ -171,41 +171,85 @@ router.post('/create-tables', async (req, res) => {
   }
 });
 
-// GET: ตรวจสอบว่าตาราง P4P ครบถ้วนหรือไม่
+// GET: ตรวจสอบว่าตาราง P4P ครบถ้วนหรือไม่ (รายงานสถานะของทุกตาราง พร้อมชื่อตาราง)
 router.get('/check-tables', async (req, res) => {
+  const REQUIRED_LIST = [
+    { name: 'p4p_doctor_point',     cols: ['p4p_items_point_id','icode','p4p_items_type_id','point','istatus','income','begin_date','finish_date','update_datetime'] },
+    { name: 'tmp_p4p_point',        cols: ['income_name','icode','meaning','price','point_old','point_new','icd9cm'] },
+    { name: 'p4p_point_log',        cols: ['p4p_point_log_id','icode','point_old','point_new','update_datetime','officer_id','officer_name'] }
+  ];
+
   if (!db.isConnected()) {
-    return res.json({ success: true, complete: false, reason: 'not_connected' });
+    return res.json({
+      success: true,
+      complete: false,
+      reason: 'not_connected',
+      tables: REQUIRED_LIST.map(t => ({ name: t.name, exists: false, missing_columns: [], complete: false }))
+    });
   }
 
-  const REQUIRED = {
-    p4p_doctor_point: ['p4p_items_point_id','icode','p4p_items_type_id','point','istatus','income','begin_date','finish_date','update_datetime'],
-    tmp_p4p_point:    ['income_name','icode','meaning','price','point_old','point_new','icd9cm'],
-    p4p_point_log:    ['p4p_point_log_id','icode','point_old','point_new','update_datetime','officer_id','officer_name']
-  };
+  const isMySQL = db.currentType() === 'mysql';
+  const tables = [];
+  let allComplete = true;
 
   try {
-    for (const [tableName, cols] of Object.entries(REQUIRED)) {
-      const tableCheck = await db.pool.query(
-        `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name=$1) as exists`,
-        [tableName]
-      );
-      if (!tableCheck.rows[0].exists) {
-        return res.json({ success: true, complete: false, reason: `missing_table:${tableName}` });
+    for (const t of REQUIRED_LIST) {
+      const tableCheck = isMySQL
+        ? await db.pool.query(
+            `SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?`,
+            [t.name]
+          )
+        : await db.pool.query(
+            `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name=$1) as exists`,
+            [t.name]
+          );
+      const exists = isMySQL
+        ? parseInt(tableCheck.rows[0].cnt) > 0
+        : tableCheck.rows[0].exists;
+
+      let missingColumns = [];
+      if (exists) {
+        const colCheck = isMySQL
+          ? await db.pool.query(
+              `SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?`,
+              [t.name]
+            )
+          : await db.pool.query(
+              `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
+              [t.name]
+            );
+        const existingCols = new Set(colCheck.rows.map(r => r.column_name));
+        missingColumns = t.cols.filter(c => !existingCols.has(c));
       }
-      const colCheck = await db.pool.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
-        [tableName]
-      );
-      const existing = new Set(colCheck.rows.map(r => r.column_name));
-      for (const col of cols) {
-        if (!existing.has(col)) {
-          return res.json({ success: true, complete: false, reason: `missing_column:${tableName}.${col}` });
-        }
-      }
+
+      const complete = exists && missingColumns.length === 0;
+      if (!complete) allComplete = false;
+      tables.push({ name: t.name, exists, missing_columns: missingColumns, complete });
     }
-    return res.json({ success: true, complete: true });
+
+    return res.json({ success: true, complete: allComplete, tables });
   } catch (err) {
-    return res.json({ success: true, complete: false, reason: err.message });
+    return res.json({
+      success: true,
+      complete: false,
+      reason: err.message,
+      tables: REQUIRED_LIST.map(t => ({ name: t.name, exists: false, missing_columns: [], complete: false }))
+    });
+  }
+});
+
+// GET: ดึงรายการห้องทำงาน สำหรับ dropdown หน้า login
+router.get('/departments', async (req, res) => {
+  if (!db.isConnected()) {
+    return res.json({ success: true, data: [] });
+  }
+  try {
+    const result = await db.pool.query(
+      `SELECT depcode, department AS depname FROM kskdepartment WHERE depcode_active = 'Y' ORDER BY department`
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    res.json({ success: false, data: [], error: err.message });
   }
 });
 

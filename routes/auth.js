@@ -12,7 +12,7 @@ const SESSION_TTL = 8 * 60 * 60 * 1000; // 8 hours
 // POST /api/auth/login
 // =====================================
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, department, department_name } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ success: false, error: 'กรุณากรอก Username และ Password' });
@@ -63,6 +63,8 @@ router.post('/login', async (req, res) => {
       officer_id: officer.officer_id,
       officer_name: officer.officer_name,
       login_name: officer.officer_login_name,
+      department: department || '',
+      department_name: department_name || '',
       created_at: Date.now()
     });
 
@@ -74,7 +76,9 @@ router.post('/login', async (req, res) => {
       officer: {
         id: officer.officer_id,
         name: officer.officer_name,
-        login_name: officer.officer_login_name
+        login_name: officer.officer_login_name,
+        department: department || '',
+        department_name: department_name || ''
       }
     });
 
@@ -107,7 +111,9 @@ router.post('/verify', (req, res) => {
     officer: {
       id: session.officer_id,
       name: session.officer_name,
-      login_name: session.login_name
+      login_name: session.login_name,
+      department: session.department || '',
+      department_name: session.department_name || ''
     },
     db: {
       db_name: session.db_name || '',

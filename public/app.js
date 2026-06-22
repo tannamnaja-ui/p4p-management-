@@ -4,6 +4,11 @@ const SETTINGS_URL = 'http://localhost:3009/api/settings';
 let selectedIncome = null;
 let selectedIncomeName = null;
 
+let allPreviewItems = [];
+let selectedPreviewIcodes = new Set();
+let previewCurrentPage = 1;
+let previewPageSize = 20;
+
 // =====================================
 // Utility Functions
 // =====================================
@@ -328,64 +333,142 @@ async function loadPreviewData(income) {
         const result = await response.json();
 
         if (result.success && result.data.length > 0) {
-            const table = `
-                <div class="bg-blue-50 p-3 rounded-lg mb-3 flex items-center justify-between">
-                    <p class="text-sm text-blue-800">
-                        <i class="fas fa-info-circle mr-2"></i>แสดงทั้งหมด ${result.count} รายการที่ต้องนำเข้า
-                    </p>
-                    <div class="flex items-center space-x-2">
-                        <button onclick="selectAllItems(true)" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs">
-                            <i class="fas fa-check-double mr-1"></i>เลือกทั้งหมด
-                        </button>
-                        <button onclick="selectAllItems(false)" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs">
-                            <i class="fas fa-times mr-1"></i>ยกเลิกทั้งหมด
-                        </button>
-                        <button onclick="selectNotImported()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs">
-                            <i class="fas fa-filter mr-1"></i>เลือกเฉพาะที่ยังไม่ได้นำเข้า
-                        </button>
-                    </div>
-                </div>
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
-                                <input type="checkbox" id="selectAllCheckbox" onchange="selectAllItems(this.checked)" class="w-4 h-4" checked>
-                            </th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">รหัส</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">ชื่อรายการ</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">ราคา</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Income</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">สถานะ</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        ${result.data.map(item => `
-                            <tr class="hover:bg-gray-50 ${item.already_imported ? 'bg-blue-50' : ''}">
-                                <td class="px-4 py-3 text-center">
-                                    <input type="checkbox" class="item-checkbox w-4 h-4" value="${item.icode}" data-item='${JSON.stringify(item)}' checked>
-                                </td>
-                                <td class="px-4 py-3 text-sm font-mono">${item.icode}</td>
-                                <td class="px-4 py-3 text-sm">${item.name}</td>
-                                <td class="px-4 py-3 text-sm text-right">${parseFloat(item.unitprice || item.price || 0).toFixed(2)}</td>
-                                <td class="px-4 py-3 text-sm">${item.income}</td>
-                                <td class="px-4 py-3 text-sm">
-                                    ${item.already_imported
-                                        ? '<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs"><i class="fas fa-check mr-1"></i>นำเข้าแล้ว</span>'
-                                        : '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">ยังไม่ได้นำเข้า</span>'
-                                    }
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>`;
-            previewSection.innerHTML = table;
+            allPreviewItems = result.data.map(item => ({
+                icode: item.icode,
+                name: item.name,
+                price: item.unitprice || item.price || 0,
+                income: item.income,
+                istatus: item.istatus,
+                already_imported: item.already_imported
+            }));
+            selectedPreviewIcodes = new Set(allPreviewItems.map(i => i.icode));
+            previewCurrentPage = 1;
+            previewPageSize = 20;
+            renderPreviewTable();
         } else {
+            allPreviewItems = [];
+            selectedPreviewIcodes = new Set();
             previewSection.innerHTML = '<p class="text-gray-500 text-center py-8">ไม่พบข้อมูล</p>';
         }
     } catch (error) {
         console.error('Error loading preview:', error);
         previewSection.innerHTML = '<p class="text-red-500 text-center py-8">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>';
     }
+}
+
+function renderPreviewTable() {
+    const previewSection = document.getElementById('previewSection');
+    const totalItems = allPreviewItems.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / previewPageSize));
+    if (previewCurrentPage > totalPages) previewCurrentPage = totalPages;
+
+    const startIdx = (previewCurrentPage - 1) * previewPageSize;
+    const pageItems = allPreviewItems.slice(startIdx, startIdx + previewPageSize);
+    const pageAllSelected = pageItems.length > 0 && pageItems.every(i => selectedPreviewIcodes.has(i.icode));
+
+    const pagerHtml = `
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="flex items-center gap-2 text-sm text-gray-600">
+                <span>แสดงหน้าละ</span>
+                <select id="pageSizeSelect" onchange="changePreviewPageSize(this.value)" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                    ${[20, 50, 100, 200, 500, 1000].map(n => `<option value="${n}" ${n === previewPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>รายการ</span>
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+                <button onclick="goToPreviewPage(previewCurrentPage - 1)" ${previewCurrentPage <= 1 ? 'disabled' : ''}
+                    class="px-3 py-1 rounded border ${previewCurrentPage <= 1 ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-gray-700 border-gray-300 hover:bg-gray-100'}">
+                    <i class="fas fa-chevron-left mr-1"></i>ก่อนหน้า
+                </button>
+                <span class="text-gray-600">หน้า ${previewCurrentPage} / ${totalPages}</span>
+                <button onclick="goToPreviewPage(previewCurrentPage + 1)" ${previewCurrentPage >= totalPages ? 'disabled' : ''}
+                    class="px-3 py-1 rounded border ${previewCurrentPage >= totalPages ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-gray-700 border-gray-300 hover:bg-gray-100'}">
+                    ถัดไป<i class="fas fa-chevron-right ml-1"></i>
+                </button>
+            </div>
+        </div>`;
+
+    const table = `
+        <div class="bg-blue-50 p-3 rounded-lg mb-3 flex items-center justify-between flex-wrap gap-2">
+            <p class="text-sm text-blue-800">
+                <i class="fas fa-info-circle mr-2"></i>แสดงทั้งหมด ${totalItems} รายการที่ต้องนำเข้า
+                <span class="ml-2 text-blue-600">(เลือกแล้ว <span id="selectedCountLabel">${selectedPreviewIcodes.size}</span> รายการ)</span>
+            </p>
+            <div class="flex items-center space-x-2">
+                <button onclick="selectAllItems(true)" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs">
+                    <i class="fas fa-check-double mr-1"></i>เลือกทั้งหมด
+                </button>
+                <button onclick="selectAllItems(false)" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs">
+                    <i class="fas fa-times mr-1"></i>ยกเลิกทั้งหมด
+                </button>
+                <button onclick="selectNotImported()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs">
+                    <i class="fas fa-filter mr-1"></i>เลือกเฉพาะที่ยังไม่ได้นำเข้า
+                </button>
+            </div>
+        </div>
+        ${pagerHtml}
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">
+                        <input type="checkbox" id="selectAllCheckbox" onchange="selectAllItems(this.checked)" class="w-4 h-4" ${pageAllSelected ? 'checked' : ''}>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">รหัส</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">ชื่อรายการ</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">ราคา</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Income</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                ${pageItems.map(item => `
+                    <tr class="hover:bg-gray-50 ${item.already_imported ? 'bg-blue-50' : ''}">
+                        <td class="px-4 py-3 text-center">
+                            <input type="checkbox" class="item-checkbox w-4 h-4" value="${item.icode}"
+                                onchange="togglePreviewSelection('${item.icode}', this.checked)" ${selectedPreviewIcodes.has(item.icode) ? 'checked' : ''}>
+                        </td>
+                        <td class="px-4 py-3 text-sm font-mono">${item.icode}</td>
+                        <td class="px-4 py-3 text-sm">${item.name}</td>
+                        <td class="px-4 py-3 text-sm text-right">${parseFloat(item.price || 0).toFixed(2)}</td>
+                        <td class="px-4 py-3 text-sm">${item.income}</td>
+                        <td class="px-4 py-3 text-sm">
+                            ${item.already_imported
+                                ? '<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs"><i class="fas fa-check mr-1"></i>นำเข้าแล้ว</span>'
+                                : '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">ยังไม่ได้นำเข้า</span>'
+                            }
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        ${pagerHtml}`;
+    previewSection.innerHTML = table;
+}
+
+function togglePreviewSelection(icode, checked) {
+    if (checked) selectedPreviewIcodes.add(icode);
+    else selectedPreviewIcodes.delete(icode);
+
+    const countEl = document.getElementById('selectedCountLabel');
+    if (countEl) countEl.textContent = selectedPreviewIcodes.size;
+
+    const startIdx = (previewCurrentPage - 1) * previewPageSize;
+    const pageItems = allPreviewItems.slice(startIdx, startIdx + previewPageSize);
+    const allCb = document.getElementById('selectAllCheckbox');
+    if (allCb) allCb.checked = pageItems.length > 0 && pageItems.every(i => selectedPreviewIcodes.has(i.icode));
+}
+
+function changePreviewPageSize(value) {
+    previewPageSize = parseInt(value) || 20;
+    previewCurrentPage = 1;
+    renderPreviewTable();
+}
+
+function goToPreviewPage(page) {
+    const totalPages = Math.max(1, Math.ceil(allPreviewItems.length / previewPageSize));
+    if (page < 1 || page > totalPages) return;
+    previewCurrentPage = page;
+    renderPreviewTable();
 }
 
 // =====================================
@@ -395,13 +478,12 @@ async function loadPreviewData(income) {
 document.getElementById('importBtn').addEventListener('click', async () => {
     if (!selectedIncome) { showAlert('กรุณาเลือก Income ก่อน', 'error'); return; }
 
-    const selectedCheckboxes = document.querySelectorAll('.item-checkbox:checked');
-    if (selectedCheckboxes.length === 0) {
+    if (selectedPreviewIcodes.size === 0) {
         showAlert('กรุณาเลือกรายการที่ต้องการ Import อย่างน้อย 1 รายการ', 'error');
         return;
     }
 
-    const selectedItems = Array.from(selectedCheckboxes).map(cb => JSON.parse(cb.dataset.item));
+    const selectedItems = allPreviewItems.filter(i => selectedPreviewIcodes.has(i.icode));
     if (!confirm(`ยืนยันการ Import ${selectedItems.length} รายการจาก Income: ${selectedIncomeName} (${selectedIncome}) ?`)) return;
 
     setButtonLoading('importBtn', true, 'กำลัง Import ข้อมูล...');
@@ -642,20 +724,18 @@ document.getElementById('refreshPreviewBtn')?.addEventListener('click', () => {
 // =====================================
 
 function selectAllItems(checked) {
-    document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = checked);
-    const all = document.getElementById('selectAllCheckbox');
-    if (all) all.checked = checked;
+    if (checked) {
+        allPreviewItems.forEach(i => selectedPreviewIcodes.add(i.icode));
+    } else {
+        selectedPreviewIcodes.clear();
+    }
+    renderPreviewTable();
 }
 
 function selectNotImported() {
-    document.querySelectorAll('.item-checkbox').forEach(cb => {
-        try {
-            const item = JSON.parse(cb.dataset.item);
-            cb.checked = !item.already_imported;
-        } catch { cb.checked = false; }
-    });
-    const all = document.getElementById('selectAllCheckbox');
-    if (all) all.checked = false;
+    selectedPreviewIcodes.clear();
+    allPreviewItems.forEach(i => { if (!i.already_imported) selectedPreviewIcodes.add(i.icode); });
+    renderPreviewTable();
 }
 
 // =====================================

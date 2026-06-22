@@ -2,11 +2,17 @@ const API_URL = 'http://localhost:3009/api/p4p';
 
 let currentData = [];
 let currentFilters = {};
+let currentCategoryLabel = '';
+let currentTotalPoint = 0;
 
 // Searchable doctor dropdown state
 let allDoctorsCache = [];
 let selectedDoctorCode = '';
 let selectedDoctorName = '';
+
+// Position checkbox dropdown state
+let allPositionsCache = [];
+let selectedPositionIds = [];
 
 // =====================================
 // Utility
@@ -70,6 +76,101 @@ function getUrlParams() {
 }
 
 // =====================================
+// Load Position List (จำค่าตามผู้ใช้ที่ login)
+// =====================================
+
+const POSITION_STORAGE_PREFIX = 'p4p_positions_';
+
+function getOfficerLoginKey() {
+    try {
+        const officer = JSON.parse(sessionStorage.getItem('p4p_officer') || '{}');
+        return officer.login_name || officer.name || 'guest';
+    } catch {
+        return 'guest';
+    }
+}
+
+function loadSavedPositionIds() {
+    try {
+        const saved = localStorage.getItem(POSITION_STORAGE_PREFIX + getOfficerLoginKey());
+        return saved ? JSON.parse(saved) : [];
+    } catch {
+        return [];
+    }
+}
+
+function savePositionIds() {
+    try {
+        localStorage.setItem(POSITION_STORAGE_PREFIX + getOfficerLoginKey(), JSON.stringify(selectedPositionIds));
+    } catch {}
+}
+
+async function loadPositions() {
+    try {
+        const res = await fetch(`${API_URL}/doctor-positions`, { headers: authHeaders() });
+        const result = await res.json();
+        if (result.success) {
+            allPositionsCache = result.data;
+            const saved = loadSavedPositionIds();
+            selectedPositionIds = saved.filter(id => allPositionsCache.some(p => String(p.id) === String(id)));
+            renderPositionOptions();
+            updatePositionSummary();
+        }
+    } catch (err) {
+        console.error('Error loading positions:', err);
+    }
+}
+
+function renderPositionOptions() {
+    const list = document.getElementById('positionOptionsList');
+    if (!list) return;
+    list.innerHTML = allPositionsCache.map(p => `
+        <label class="flex items-center px-3 py-2 hover:bg-teal-50 cursor-pointer text-sm">
+            <input type="checkbox" class="position-checkbox mr-2 w-4 h-4" value="${p.id}"
+                ${selectedPositionIds.includes(String(p.id)) ? 'checked' : ''}
+                onchange="onPositionCheckboxChange()">
+            <span>${p.name}</span>
+        </label>
+    `).join('');
+}
+
+function togglePositionDropdown() {
+    const dd = document.getElementById('positionDropdown');
+    if (dd) dd.classList.toggle('hidden');
+}
+
+function closePositionDropdown() {
+    const dd = document.getElementById('positionDropdown');
+    if (dd) dd.classList.add('hidden');
+}
+
+function selectAllPositions(checked) {
+    document.querySelectorAll('.position-checkbox').forEach(cb => cb.checked = checked);
+    onPositionCheckboxChange();
+}
+
+async function onPositionCheckboxChange() {
+    selectedPositionIds = Array.from(document.querySelectorAll('.position-checkbox:checked')).map(cb => cb.value);
+    savePositionIds();
+    updatePositionSummary();
+    selectDoctor('', '');
+    await loadDoctors();
+}
+
+function updatePositionSummary() {
+    const summary = document.getElementById('positionSummary');
+    if (!summary) return;
+    if (selectedPositionIds.length === 0) {
+        summary.textContent = '-- ทุกตำแหน่ง --';
+    } else if (selectedPositionIds.length === 1) {
+        const pos = allPositionsCache.find(p => String(p.id) === selectedPositionIds[0]);
+        summary.textContent = pos ? pos.name : '1 ตำแหน่งที่เลือก';
+    } else {
+        summary.textContent = `${selectedPositionIds.length} ตำแหน่งที่เลือก`;
+    }
+}
+
+// =====================================
 // Load Doctor List
 // =====================================
 
@@ -129,7 +230,7 @@ function filterDoctorDropdown(q) {
 
 function selectDoctor(code, name) {
     selectedDoctorCode = code;
-    selectedDoctorName = name === '-- แพทย์ทุกคน --' ? 'แพทย์ทุกคน' : name;
+    selectedDoctorName = name === '-- แพทย์ทุกคน --' ? '' : name;
     const input = document.getElementById('doctorSearchInput');
     const clearBtn = document.getElementById('clearDoctorBtn');
     if (input) input.value = code ? name : '';
@@ -160,6 +261,11 @@ async function loadDoctors() {
         // ถ้ามี group ให้กรองเฉพาะแพทย์ในกลุ่ม
         if (groupDoctorCodes.length > 0) {
             doctors = doctors.filter(d => groupDoctorCodes.includes(d.code));
+        }
+
+        // ถ้าเลือกตำแหน่ง ให้กรองเฉพาะแพทย์ในตำแหน่งที่เลือก (เลือกได้หลายตำแหน่ง)
+        if (selectedPositionIds.length > 0) {
+            doctors = doctors.filter(d => selectedPositionIds.includes(String(d.position_id)));
         }
 
         allDoctorsCache = doctors;
@@ -226,6 +332,7 @@ async function loadReport() {
         let url = `${API_URL}/report?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`;
         if (doctor) url += `&doctor=${encodeURIComponent(doctor)}`;
         if (income) url += `&income=${encodeURIComponent(income)}`;
+        if (!doctor && selectedPositionIds.length > 0) url += `&position_ids=${encodeURIComponent(selectedPositionIds.join(','))}`;
 
         const res = await fetch(url, { headers: authHeaders() });
         const result = await res.json();
@@ -237,10 +344,11 @@ async function loadReport() {
         }
 
         currentData = result.data;
+        currentTotalPoint = result.total_point;
         currentFilters = { dateFrom, dateTo, doctor, income,
-            doctorName: selectedDoctorName || 'แพทย์ทุกคน' };
+            doctorName: selectedDoctorName || '' };
 
-        const doctorName = selectedDoctorName || 'แพทย์ทุกคน';
+        const doctorName = selectedDoctorName || '';
         const incomeName = income
             ? (document.getElementById('incomeSelect').selectedOptions[0]?.text || income)
             : 'ทุก Income';
@@ -267,19 +375,84 @@ function formatDate(dateStr) {
     return d.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
+function groupByDoctor(data) {
+    const map = new Map();
+    data.forEach(item => {
+        const key = item.doctor_code || item.doctor_name || '_unknown';
+        if (!map.has(key)) {
+            map.set(key, { doctor_name: item.doctor_name || 'ไม่ระบุแพทย์', items: [] });
+        }
+        map.get(key).items.push(item);
+    });
+    return Array.from(map.values()).sort((a, b) => a.doctor_name.localeCompare(b.doctor_name, 'th'));
+}
+
+function renderDoctorGroup(group, dateFrom, dateTo) {
+    const rows = group.items.map((item, idx) => `
+        <tr class="hover:bg-teal-50 transition duration-150 ${idx % 2 === 0 ? '' : 'bg-gray-50'}">
+            <td class="px-4 py-2 text-sm text-center text-gray-500">${idx + 1}</td>
+            <td class="px-4 py-2 text-sm text-gray-700">${formatDate(item.vstdate)}</td>
+            <td class="px-4 py-2 text-sm font-mono text-teal-700">${item.hn || '-'}</td>
+            <td class="px-4 py-2 text-sm text-gray-800">${item.item_name || item.icode || '-'}</td>
+            <td class="px-4 py-2 text-sm text-gray-600">${item.income_name || item.income || '-'}</td>
+            <td class="px-4 py-2 text-sm font-semibold text-right text-teal-800">${item.point != null ? parseFloat(item.point).toFixed(2) : '-'}</td>
+        </tr>
+    `).join('');
+
+    const subtotal = group.items.reduce((s, r) => s + (parseFloat(r.point) || 0), 0);
+
+    return `
+        <div class="mb-6 doctor-group">
+            <div class="bg-teal-600 text-white px-4 py-2.5 rounded-t-lg flex items-center justify-between">
+                <p class="font-bold flex items-center">
+                    <i class="fas fa-user-md mr-2"></i>${group.doctor_name}
+                    <span class="ml-3 text-teal-100 text-sm font-normal">(${formatDate(dateFrom)} - ${formatDate(dateTo)})</span>
+                </p>
+                <span class="text-teal-100 text-sm">${group.items.length} รายการ</span>
+            </div>
+            <div class="overflow-x-auto border border-teal-200 rounded-b-lg">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gradient-to-r from-teal-50 to-teal-100">
+                        <tr>
+                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase w-12">#</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">วันที่</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">HN</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">ชื่อรายการ</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Income</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Point</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        ${rows}
+                        <tr class="bg-teal-50">
+                            <td colspan="5" class="px-4 py-2.5 text-sm font-bold text-right text-teal-800">รวม Point (${group.doctor_name}):</td>
+                            <td class="px-4 py-2.5 text-sm font-bold text-right text-teal-800">${subtotal.toFixed(2)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
 function displayReport(data, totalPoint, doctorName, incomeName, dateFrom, dateTo) {
     // Update on-screen header
     const reportTitle   = document.getElementById('reportTitle');
     const doctorTitle   = document.getElementById('doctorTitle');
     const reportSubtitle = document.getElementById('reportSubtitle');
-    doctorTitle.textContent = doctorName;
+    if (doctorName) {
+        doctorTitle.textContent = doctorName;
+        doctorTitle.classList.remove('hidden');
+    } else {
+        doctorTitle.textContent = '';
+        doctorTitle.classList.add('hidden');
+    }
     reportSubtitle.textContent = `วันที่ ${formatDate(dateFrom)} ถึง ${formatDate(dateTo)} | Income: ${incomeName}`;
     reportTitle.classList.remove('hidden');
 
-    // Update print header
-    document.getElementById('printTitle').textContent = `รายงาน P4P - ${doctorName}`;
-    document.getElementById('printSubtitle').textContent =
-        `วันที่ ${formatDate(dateFrom)} ถึง ${formatDate(dateTo)} | Income: ${incomeName}`;
+    // Update print header (แสดงกลางหน้าจอบนหัวตารางของทุกหน้าตอนพิมพ์)
+    document.getElementById('printTitle').textContent = doctorName
+        ? `รายงาน P4P - ${doctorName}`
+        : (currentCategoryLabel ? `รายงาน P4P - ${currentCategoryLabel}` : 'รายงาน P4P');
 
     const section = document.getElementById('dataSection');
 
@@ -292,78 +465,85 @@ function displayReport(data, totalPoint, doctorName, incomeName, dateFrom, dateT
         return;
     }
 
-    const rows = data.map((item, idx) => `
-        <tr class="hover:bg-teal-50 transition duration-150 ${idx % 2 === 0 ? '' : 'bg-gray-50'}">
-            <td class="px-4 py-2 text-sm text-center text-gray-500">${idx + 1}</td>
-            <td class="px-4 py-2 text-sm text-gray-700">${formatDate(item.vstdate)}</td>
-            <td class="px-4 py-2 text-sm font-mono text-teal-700">${item.hn || '-'}</td>
-            <td class="px-4 py-2 text-sm text-gray-800">${item.item_name || item.icode || '-'}</td>
-            <td class="px-4 py-2 text-sm text-gray-600">${item.income_name || item.income || '-'}</td>
-            <td class="px-4 py-2 text-sm font-semibold text-right text-teal-800">${item.point != null ? parseFloat(item.point).toFixed(2) : '-'}</td>
-        </tr>
-    `).join('');
+    const groups = groupByDoctor(data);
+    const groupsHtml = groups.map(g => renderDoctorGroup(g, dateFrom, dateTo)).join('');
 
     section.innerHTML = `
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gradient-to-r from-teal-50 to-teal-100">
-                    <tr>
-                        <th class="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase w-12">#</th>
-                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">วันที่</th>
-                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">HN</th>
-                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">ชื่อรายการ</th>
-                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Income</th>
-                        <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Point</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    ${rows}
-                </tbody>
-                <tfoot class="bg-teal-700 text-white">
-                    <tr>
-                        <td colspan="5" class="px-4 py-3 text-sm font-bold text-right">รวม Point ทั้งหมด (${data.length} รายการ):</td>
-                        <td class="px-4 py-3 text-lg font-bold text-right">${parseFloat(totalPoint).toFixed(2)}</td>
-                    </tr>
-                </tfoot>
-            </table>
+        ${groupsHtml}
+        <div class="bg-teal-800 text-white rounded-lg px-4 py-3 flex items-center justify-between">
+            <p class="font-bold">รวม Point ทั้งหมด (${data.length} รายการ, ${groups.length} แพทย์):</p>
+            <p class="text-xl font-bold">${parseFloat(totalPoint).toFixed(2)}</p>
         </div>`;
 }
 
 // =====================================
-// Export CSV
+// Export Excel (.xlsx) — แยกชีทตามแพทย์ ชื่อชีท = ชื่อแพทย์
 // =====================================
 
-function exportCSV() {
+function sanitizeSheetName(name, usedNames) {
+    let clean = String(name || 'Sheet').replace(/[\\/?*[\]:]/g, '').trim();
+    if (!clean) clean = 'Sheet';
+    if (clean.length > 31) clean = clean.slice(0, 31);
+    let finalName = clean;
+    let counter = 2;
+    while (usedNames.has(finalName)) {
+        const suffix = ` (${counter})`;
+        finalName = clean.slice(0, 31 - suffix.length) + suffix;
+        counter++;
+    }
+    usedNames.add(finalName);
+    return finalName;
+}
+
+function buildDoctorSheetRows(group, dateFrom, dateTo) {
+    const titleLine = `รายงาน P4P - ${group.doctor_name}`;
+    const dateRangeText = `วันที่ ${formatDate(dateFrom)} ถึง ${formatDate(dateTo)}`;
+    const headerRow = ['ลำดับ', 'วันที่', 'HN', 'ชื่อรายการ', 'Income', 'Point'];
+    let subtotal = 0;
+    const dataRows = group.items.map((item, idx) => {
+        const point = item.point != null ? parseFloat(item.point) : 0;
+        subtotal += point;
+        return [idx + 1, formatDate(item.vstdate), item.hn || '-', item.item_name || item.icode || '-', item.income_name || item.income || '-', point];
+    });
+    const totalRow = ['', '', '', '', `รวม Point (${group.doctor_name}):`, subtotal];
+    return [[titleLine], [dateRangeText], [], headerRow, ...dataRows, totalRow];
+}
+
+function exportExcel() {
     if (currentData.length === 0) {
         showAlert('ไม่มีข้อมูลสำหรับ Export', 'error');
         return;
     }
 
-    let csv = '\uFEFF'; // UTF-8 BOM
-    csv += 'ลำดับ,วันที่,HN,ชื่อรายการ,Income,Point\n';
-    currentData.forEach((item, idx) => {
-        csv += `${idx + 1},`;
-        csv += `${formatDate(item.vstdate)},`;
-        csv += `"${item.hn || ''}",`;
-        csv += `"${(item.item_name || item.icode || '').replace(/"/g, '""')}",`;
-        csv += `"${(item.income_name || item.income || '').replace(/"/g, '""')}",`;
-        csv += `${item.point != null ? parseFloat(item.point).toFixed(2) : ''}\n`;
+    const groups = groupByDoctor(currentData);
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set();
+    groups.forEach(group => {
+        const rows = buildDoctorSheetRows(group, currentFilters.dateFrom, currentFilters.dateTo);
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 28 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(group.doctor_name, usedNames));
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-
     const doctorName = currentFilters.doctorName || 'All';
-    const filename = `P4P_Report_${doctorName}_${currentFilters.dateFrom}_${currentFilters.dateTo}.csv`.replace(/\s+/g, '_');
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const filename = `P4P_Report_${doctorName}_${currentFilters.dateFrom}_${currentFilters.dateTo}.xlsx`.replace(/\s+/g, '_');
+    XLSX.writeFile(wb, filename);
 
     showAlert('Export ข้อมูลสำเร็จ!', 'success');
 }
+
+// =====================================
+// Print Footer (วันที่-เวลาที่พิมพ์ ท้ายกระดาษทุกหน้า)
+// =====================================
+
+window.addEventListener('beforeprint', () => {
+    const footer = document.getElementById('printFooter');
+    if (!footer) return;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    footer.textContent = `พิมพ์เมื่อ ${dateStr} ${timeStr}`;
+});
 
 // =====================================
 // Render User Bar
@@ -401,6 +581,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // If category_label param — show badge and update back button
     if (urlParams.category_label) {
+        currentCategoryLabel = urlParams.category_label;
         const groupBadge = document.getElementById('groupBadge');
         if (groupBadge) {
             groupBadge.textContent = urlParams.category_label;
@@ -432,6 +613,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // loadPositions ต้องเสร็จก่อน เพื่อให้ตำแหน่งที่จำไว้ถูกใช้กรองตอนโหลดแพทย์
+    await loadPositions();
     await Promise.all([loadDoctors(), loadIncomeList()]);
 
     // Pre-select income from URL param
@@ -446,5 +629,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('click', e => {
         const wrap = document.getElementById('doctorDropdownWrap');
         if (wrap && !wrap.contains(e.target)) closeDoctorDropdown();
+
+        const posWrap = document.getElementById('positionDropdownWrap');
+        if (posWrap && !posWrap.contains(e.target)) closePositionDropdown();
     });
 });
