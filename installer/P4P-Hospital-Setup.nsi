@@ -16,7 +16,7 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel admin
 
 Name "${APPNAME}"
-OutFile "P4P_Hospital.exe"
+OutFile "P4P_Hospital-Setup-Full.exe"
 InstallDir "$PROGRAMFILES64\P4P-Hospital"
 InstallDirRegKey HKLM "${INSTKEY}" "InstallDir"
 
@@ -25,6 +25,9 @@ InstallDirRegKey HKLM "${INSTKEY}" "InstallDir"
 ; ============================================================
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+
+!define MUI_ICON   "p4p-icon.ico"
+!define MUI_UNICON "p4p-icon.ico"
 
 !define MUI_ABORTWARNING
 
@@ -66,6 +69,27 @@ FunctionEnd
 Section "ติดตั้งโปรแกรม" SecMain
 
   SetDetailsPrint both
+
+  ; ----------------------------------------------------------
+  ; ลบตัวติดตั้งเดิมอัตโนมัติ (ถ้ามี) ก่อนติดตั้งใหม่
+  ; ----------------------------------------------------------
+  DetailPrint "กำลังตรวจสอบโปรแกรมเวอร์ชันก่อนหน้า..."
+
+  ReadRegStr $0 HKLM "${UNINSTKEY}" "QuietUninstallString"
+  ${If} $0 != ""
+    DetailPrint "พบโปรแกรมเวอร์ชันก่อนหน้า - กำลังลบออกก่อนติดตั้งใหม่..."
+    ExecWait 'taskkill /f /im node.exe'
+    ExecWait '$0'
+    Sleep 1000
+  ${EndIf}
+
+  ; เผื่อโฟลเดอร์เดิมหลงเหลือจากการติดตั้งแบบ portable/manual
+  ${If} ${FileExists} "$INSTDIR\server.js"
+  ${AndIf} $0 == ""
+    DetailPrint "พบไฟล์โปรแกรมเดิมที่ $INSTDIR - กำลังลบออกก่อนติดตั้งใหม่..."
+    ExecWait 'taskkill /f /im node.exe'
+    RMDir /r "$INSTDIR"
+  ${EndIf}
 
   ; ----------------------------------------------------------
   ; ตรวจสอบ Node.js (ข้ามถ้ามีอยู่แล้ว)
@@ -114,6 +138,7 @@ Section "ติดตั้งโปรแกรม" SecMain
   File "..\server.js"
   File "..\package.json"
   File "..\create-tables.js"
+  File "p4p-icon.ico"
 
   SetOutPath "$INSTDIR\public"
   File "..\public\app.js"
@@ -215,13 +240,13 @@ Section "ติดตั้งโปรแกรม" SecMain
 
   CreateDirectory "$SMPROGRAMS\P4P Hospital"
   CreateShortCut "$SMPROGRAMS\P4P Hospital\เปิด P4P Hospital.lnk" \
-    "$SYSDIR\wscript.exe" '"$INSTDIR\start-p4p.vbs"'
+    "$SYSDIR\wscript.exe" '"$INSTDIR\start-p4p.vbs"' "$INSTDIR\p4p-icon.ico" 0
   CreateShortCut "$SMPROGRAMS\P4P Hospital\หยุดเซิร์ฟเวอร์.lnk" \
-    "$SYSDIR\wscript.exe" '"$INSTDIR\stop-p4p.vbs"'
+    "$SYSDIR\wscript.exe" '"$INSTDIR\stop-p4p.vbs"' "$INSTDIR\p4p-icon.ico" 0
   CreateShortCut "$SMPROGRAMS\P4P Hospital\ถอนการติดตั้ง.lnk" \
     "$INSTDIR\Uninstall.exe"
   CreateShortCut "$DESKTOP\P4P Hospital.lnk" \
-    "$SYSDIR\wscript.exe" '"$INSTDIR\start-p4p.vbs"'
+    "$SYSDIR\wscript.exe" '"$INSTDIR\start-p4p.vbs"' "$INSTDIR\p4p-icon.ico" 0
 
   ; ----------------------------------------------------------
   ; Registry (Add/Remove Programs)
