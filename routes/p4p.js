@@ -244,9 +244,9 @@ router.post('/import-data', async (req, res) => {
     const existMap = new Map(existP4P.rows.map(r => [r.icode, r.point]));
 
     const toInsert = items.filter(i => !existMap.has(i.icode));
-    const toUpdate = items.filter(i =>  existMap.has(i.icode));
+    const skipped  = items.filter(i =>  existMap.has(i.icode));
 
-    // 4. batch INSERT (1 query)
+    // 4. batch INSERT รายการใหม่เท่านั้น (รายการที่มีอยู่แล้วข้ามทั้งหมด)
     if (toInsert.length > 0) {
       await client.query(`
         INSERT INTO p4p_doctor_point (p4p_items_point_id, icode, point, istatus, income, update_datetime)
@@ -256,23 +256,8 @@ router.post('/import-data', async (req, res) => {
       `, [toInsert.map(i => i.icode), toInsert.map(i => i.istatus || 'Y'), toInsert.map(i => i.income)]);
     }
 
-    // 5. batch UPDATE (1 query)
-    if (toUpdate.length > 0) {
-      await client.query(`
-        UPDATE p4p_doctor_point AS p
-        SET point = 0, istatus = v.istatus, income = v.income, update_datetime = NOW()
-        FROM (SELECT UNNEST($1::text[]) AS icode,
-                     UNNEST($2::text[]) AS istatus,
-                     UNNEST($3::text[]) AS income) AS v
-        WHERE p.icode = v.icode
-      `, [toUpdate.map(i => i.icode), toUpdate.map(i => i.istatus || 'Y'), toUpdate.map(i => i.income)]);
-    }
-
-    // 6. batch log (1 query)
-    const logItems = [
-      ...toInsert.map(i => ({ icode: i.icode, point_old: null,                  point_new: 0 })),
-      ...toUpdate.map(i => ({ icode: i.icode, point_old: existMap.get(i.icode), point_new: 0 })),
-    ];
+    // 5. log เฉพาะรายการใหม่ที่ INSERT
+    const logItems = toInsert.map(i => ({ icode: i.icode, point_old: null, point_new: 0 }));
     await ensureP4PLogTable(client);
     await batchLogP4P(client, logItems, officerId, officerName);
 
@@ -285,10 +270,9 @@ router.post('/import-data', async (req, res) => {
     const existTmpSet = new Set(existTmp.rows.map(r => r.icode));
 
     const tmpInsert = items.filter(i => !existTmpSet.has(i.icode));
-    const tmpUpdate = items.filter(i =>  existTmpSet.has(i.icode));
     const prices    = items.reduce((m, i) => { m.set(i.icode, parseFloat(i.unitprice || i.price || i.unit_price || 0)); return m; }, new Map());
 
-    // 8. batch INSERT tmp (1 query)
+    // 8. batch INSERT tmp รายการใหม่เท่านั้น (รายการที่มีอยู่แล้วข้ามทั้งหมด)
     if (tmpInsert.length > 0) {
       await client.query(`
         INSERT INTO tmp_p4p_point (income_name, icode, meaning, price)
@@ -298,22 +282,8 @@ router.post('/import-data', async (req, res) => {
           tmpInsert.map(i => i.name || ''), tmpInsert.map(i => prices.get(i.icode))]);
     }
 
-    // 9. batch UPDATE tmp (1 query)
-    if (tmpUpdate.length > 0) {
-      await client.query(`
-        UPDATE tmp_p4p_point AS t
-        SET income_name = v.income_name, meaning = v.meaning, price = v.price
-        FROM (SELECT UNNEST($1::text[]) AS icode,
-                     UNNEST($2::text[]) AS income_name,
-                     UNNEST($3::text[]) AS meaning,
-                     UNNEST($4::numeric[]) AS price) AS v
-        WHERE t.icode = v.icode
-      `, [tmpUpdate.map(i => i.icode), tmpUpdate.map(i => i.income_name),
-          tmpUpdate.map(i => i.name || ''), tmpUpdate.map(i => prices.get(i.icode))]);
-    }
-
     await client.query('COMMIT');
-    console.log(`✅ Imported ${items.length} items (insert:${toInsert.length} update:${toUpdate.length})`);
+    console.log(`✅ Imported ${items.length} items (insert:${toInsert.length} skipped:${skipped.length})`);
 
     res.status(201).json({
       success: true,
@@ -321,8 +291,8 @@ router.post('/import-data', async (req, res) => {
       summary: {
         income,
         total_items: items.length,
-        p4p_doctor_point: { inserted: toInsert.length, updated: toUpdate.length, skipped: 0 },
-        tmp_p4p_point:    { inserted: tmpInsert.length, updated: tmpUpdate.length }
+        p4p_doctor_point: { inserted: toInsert.length, updated: 0, skipped: skipped.length },
+        tmp_p4p_point:    { inserted: tmpInsert.length, updated: 0 }
       },
       timestamp: new Date().toISOString()
     });

@@ -343,8 +343,8 @@ async function loadReport() {
             return;
         }
 
-        currentData = result.data;
-        currentTotalPoint = result.total_point;
+        currentData = result.data.filter(r => parseFloat(r.point) !== 0);
+        currentTotalPoint = currentData.reduce((s, r) => s + (parseFloat(r.point) || 0), 0);
         currentFilters = { dateFrom, dateTo, doctor, income,
             doctorName: selectedDoctorName || '' };
 
@@ -353,7 +353,7 @@ async function loadReport() {
             ? (document.getElementById('incomeSelect').selectedOptions[0]?.text || income)
             : 'ทุก Income';
 
-        displayReport(result.data, result.total_point, doctorName, incomeName, dateFrom, dateTo);
+        displayReport(currentData, currentTotalPoint, doctorName, incomeName, dateFrom, dateTo);
 
         // Show export button
         document.getElementById('exportBtn').classList.toggle('hidden', result.count === 0);
